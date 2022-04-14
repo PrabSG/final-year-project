@@ -27,6 +27,12 @@ class ExperienceReplay():
       self._full = True
       self._idx = 0
   
+  def __len__(self):
+    if self._full:
+      return self._buffer_size
+    else:
+      return self._idx
+  
   def get_sample(self, sample_size):
     """Return uniformly random sample of experiences with replacement."""
     max_idx = self._buffer_size
