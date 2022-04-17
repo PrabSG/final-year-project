@@ -13,6 +13,10 @@ class Agent(ABC):
   def choose_action(self):
     pass
 
+  @abstractmethod
+  def evaluate(self):
+    pass
+
 class RandomAgent(Agent):
   def __init__(self, env_state_size, env_action_size, env_action_value_range) -> None:
     super().__init__()
@@ -26,3 +30,6 @@ class RandomAgent(Agent):
 
   def choose_action(self, state):
     return np.random.uniform(self.action_min, self.action_max, size=self.action_size)
+
+  def evaluate(self):
+    pass
