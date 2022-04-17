@@ -1,9 +1,5 @@
 import random
 
-import torch.nn as nn
-import numpy as np
-
-from agent import Agent
 from utils import DimensionError
 
 class ExperienceReplay():
@@ -38,6 +34,6 @@ class ExperienceReplay():
     max_idx = self._buffer_size
     
     if not self._full:
-      max_idx = self.idx
+      max_idx = self._idx
     
     return random.choices(self._buffer[:max_idx], k=sample_size)
