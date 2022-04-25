@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import random
 
 import numpy as np
+import gym
 
 
 class Environment(ABC):
@@ -41,9 +42,10 @@ class Environment(ABC):
 
 class MiniGridEnvWrapper(Environment):
 
-  def __init__(self, envClass, **kwargs) -> None:
+  def __init__(self, env_key, seed=None, **kwargs) -> None:
     super().__init__()
-    self._env = envClass(**kwargs)
+    self._env = gym.make(env_key, **kwargs)
+    self._env.seed(seed)
     self._is_done = False
 
   def _get_state(self):

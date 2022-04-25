@@ -1,7 +1,7 @@
 import argparse
 
 from agents.agent import RandomAgent
-from env import BasicEnv
+from envs.env import BasicEnv
 
 AGENT_CHOICES = ["random"]
 ENV_CHOICES = ["basic"]
