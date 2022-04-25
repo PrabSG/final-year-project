@@ -16,7 +16,7 @@ def init_env(env_type):
 
 def init_agent(agent_type, env):
   if agent_type == "random":
-    return RandomAgent(env.state_size, env.action_size, env.action_value_range)
+    return RandomAgent(env.state_size, env.action_size)
   else:
     raise ValueError(f"Agent Type '{agent_type}' not defined.")
 
