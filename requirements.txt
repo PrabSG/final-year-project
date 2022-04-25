@@ -1,2 +1,5 @@
 gym
+gym-minigrid
+matplotlib
+numpy
 torch
