@@ -47,6 +47,8 @@ OBJECT_TO_IDX = {
     'goal'          : 8,
     'lava'          : 9,
     'agent'         : 10,
+    'water'         : 11,
+    'glass'         : 12,
 }
 
 IDX_TO_OBJECT = dict(zip(OBJECT_TO_IDX.values(), OBJECT_TO_IDX.keys()))
@@ -142,6 +144,10 @@ class WorldObj:
             v = Goal()
         elif obj_type == 'lava':
             v = Lava()
+        elif obj_type == 'water':
+            v = Water()
+        elif obj_type == 'glass':
+            v = Glass()
         else:
             assert False, "unknown object type in decode '%s'" % obj_type
 
@@ -325,6 +331,47 @@ class Box(WorldObj):
         # Replace the box by its contents
         env.grid.set(*pos, self.contains)
         return True
+
+class Water(WorldObj):
+    def __init__(self):
+        super().__init__('water', 'blue')
+
+    def can_overlap(self):
+        return True
+
+    def render(self, img):
+        c = (0, 64, 128)
+        lc = (0, 128, 255)
+
+        # Background color
+        fill_coords(img, point_in_rect(0, 1, 0, 1), c)
+
+        # Little waves
+        for i in range(3):
+            ylo = 0.3 + 0.2 * i
+            yhi = 0.4 + 0.2 * i
+            fill_coords(img, point_in_line(0.1, ylo, 0.3, yhi, r=0.03), lc)
+            fill_coords(img, point_in_line(0.3, yhi, 0.5, ylo, r=0.03), lc)
+            fill_coords(img, point_in_line(0.5, ylo, 0.7, yhi, r=0.03), lc)
+            fill_coords(img, point_in_line(0.7, yhi, 0.9, ylo, r=0.03), lc)
+
+class Glass(WorldObj):
+    def __init__(self):
+        super().__init__('glass', 'grey')
+
+    def can_overlap(self):
+        return True
+    
+    def render(self, img):
+        c = (220, 240, 255)
+        lc = (255, 255, 255)
+
+        fill_coords(img, point_in_rect(0, 1, 0, 1), c)
+
+        fill_coords(img, point_in_triangle((0,0), (1,1), (0,0.175)), lc)
+        fill_coords(img, point_in_triangle((0.825,1), (1,1), (0,0.175)), lc)
+        fill_coords(img, point_in_triangle((0,0), (1,1), (0.175,0)), lc)
+        fill_coords(img, point_in_triangle((0,0.175), (1,1), (1,0.825)), lc)
 
 class Grid:
     """
@@ -769,6 +816,8 @@ class MiniGridEnv(gym.Env):
             'box'           : 'B',
             'goal'          : 'G',
             'lava'          : 'V',
+            'water'         : 'P',
+            'glass'         : 'G',
         }
 
         # Short string for opened door
@@ -1125,7 +1174,7 @@ class MiniGridEnv(gym.Env):
             if fwd_cell != None and fwd_cell.type == 'goal':
                 done = True
                 reward = self._reward()
-            if fwd_cell != None and fwd_cell.type == 'lava':
+            if fwd_cell != None and (fwd_cell.type == 'lava' or fwd_cell.type == self.obstacle_type):
                 done = True
 
         # Pick up an object
