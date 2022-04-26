@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import random
 
 import numpy as np
-import torch
+import gym
 
 
 class Environment(ABC):
@@ -40,6 +40,49 @@ class Environment(ABC):
   def state_size(self):
     pass
 
+class MiniGridEnvWrapper(Environment):
+
+  def __init__(self, env_key, seed=None, **kwargs) -> None:
+    super().__init__()
+    self._env = gym.make(env_key, **kwargs)
+    self._env.seed(seed)
+    self._is_done = False
+
+  def _get_state(self):
+    return self._env.grid
+
+  def get_observation(self):
+    return self._env.gen_obs()
+  
+  def step(self, action):
+    obs, reward, done, info = self._env.step(action)
+    self._is_done = done
+    return obs, reward, done, info
+  
+  def is_complete(self):
+    return self._is_done
+  
+  def reset(self, random_start=True, seed=None):
+    """Reset Environment for next episode. If random_start is set to False, the same exact
+      environment and configuration will be used, otherwise a new one will be generated from the
+      seed."""
+    
+    if not random_start and seed is not None:
+      self._env.seed(seed)
+    
+    self.env.reset()
+
+  def close(self):
+    self._env.close()
+
+  @property
+  def action_size(self):
+    return len(self._env.actions)
+  
+  @property
+  def state_size(self):
+    return self._env.observation_space
+
 
 class BasicEnv(Environment):
   """2-D grid environment with single goal state.
@@ -68,7 +111,6 @@ class BasicEnv(Environment):
   def __init__(self) -> None:
       super().__init__()
       self._action_size = (4)
-      self._action_value_range = (0, 1)
       self._state_size = (2)
 
       self._state = np.array([5, 5], dtype=np.float)
@@ -97,13 +139,13 @@ class BasicEnv(Environment):
     # return - np.linalg.norm(new_state - self._goal_state) ** 2
 
   def get_observation(self):
-      return super().get_observation()
+    return super().get_observation()
 
   def step(self, action):
     next_state = self._get_next_state(self._state, action)
     reward = self._get_reward(next_state)
     self._state = next_state
-    return self._state, reward, self.is_complete()
+    return self._state, reward, self.is_complete(), {}
 
   def is_complete(self):
     return np.all(np.isclose(self._state, self._goal_state))
@@ -122,10 +164,6 @@ class BasicEnv(Environment):
   @property
   def action_size(self):
     return self._action_size
-  
-  @property
-  def action_value_range(self):
-    return self._action_value_range
 
   @property
   def state_size(self):
