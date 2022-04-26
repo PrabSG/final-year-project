@@ -7,7 +7,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
   Environment with gaps in walls to pass through to reach a goal whilst avoiding a random object.
   """
 
-  gap_objs = {"floor": Floor(), "door": Door(is_open=True), "water": Water(), "glass": Glass()}
+  gap_objs = {"floor": Floor(), "door": Door(color="green", is_open=True), "water": Water(), "glass": Glass()}
 
   def __init__(
     self,
@@ -28,7 +28,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
       else:
         self.obstacle_objs[t] = self.gap_objs[t]
       
-    self.safe_gap_types = [obj_type for obj_type in self.gap_objs.keys() if obj_type != self.obstacle_type]
+    self.safe_gap_types = [obj_type for obj_type in self.gap_objs.keys() if not (obj_type in self.obstacle_types)]
     super().__init__(grid_size=grid_size, width=width, height=height, seed=seed, agent_view_size=agent_view_size)
 
   def _gen_grid(self, width, height):
