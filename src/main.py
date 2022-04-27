@@ -120,7 +120,4 @@ if __name__ == "__main__":
   env, agent = initialise(args)
   train_agent(env, agent, args)
   run_agent(env, agent, args)
-<<<<<<< HEAD
   visualise_agent(env, agent, args)
-=======
->>>>>>> ba1ced2a21d5ee2ab6505491e4415f51847637ea
