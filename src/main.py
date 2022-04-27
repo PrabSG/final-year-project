@@ -16,9 +16,9 @@ def init_env(args):
   if args.env == "basic":
     return BasicEnv()
   elif args.env == "unsafe-small":
-    return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingN1-v0")
+    return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingN1-v0", max_steps=args.max_episode_length)
   elif args.env == "unsafe-med":
-    return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingN2-v0")
+    return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingN2-v0", max_steps=args.max_episode_length)
   else:
     raise ValueError(f"Environment Type '{args.env}' not defined.")
 
@@ -89,25 +89,31 @@ def visualise_agent(env, agent, args):
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(description="Agent and Environment options")
+  # Environment arguments
   parser.add_argument("--env", default="basic", choices=ENV_CHOICES, help="Environment Type")
-  parser.add_argument("--agent", default="random", choices=AGENT_CHOICES, help="Agent Type")
-  parser.add_argument("--disable-cuda", action="store_false", help="Disable CUDA")
   parser.add_argument("--max-episode-length", type=int, default=MAX_EPISODE_LENGTH, help="Maximum number of steps per episode")
+  # Agent arguments
+  parser.add_argument("--agent", default="random", choices=AGENT_CHOICES, help="Agent Type")
+  # Script options
+  parser.add_argument("--disable-cuda", action="store_false", help="Disable CUDA")
   parser.add_argument("--gif", type=str, help="Filename for visualisation episodes gif")
   parser.add_argument("--vis-eps", type=int, default=VISUALISATION_EPISODES, help="Number of episodes to visualise")
+
+  args = parser.parse_args()
 
   # TODO: Figure out how to correctly register environments
   register(
     id="MiniGrid-UnsafeCrossingN1-v0",
-    entry_point="envs.gym_minigrid.envs:UnsafeCrossingSmallEnv"
+    entry_point="envs.gym_minigrid.envs:UnsafeCrossingSmallEnv",
+    kwargs={"max_steps": args.max_episode_length}
   )
 
   register(
     id="MiniGrid-UnsafeCrossingN2-v0",
-    entry_point="envs.gym_minigrid.envs:UnsafeCrossingMedEnv"
+    entry_point="envs.gym_minigrid.envs:UnsafeCrossingMedEnv",
+    kwargs={"max_steps": args.max_episode_length}
   )
-
-  args = parser.parse_args()
+  
   env, agent = initialise(args)
   train_agent(env, agent, args)
   run_agent(env, agent, args)
