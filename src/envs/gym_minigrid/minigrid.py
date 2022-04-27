@@ -817,7 +817,7 @@ class MiniGridEnv(gym.Env):
             'goal'          : 'G',
             'lava'          : 'V',
             'water'         : 'P',
-            'glass'         : 'G',
+            'glass'         : 'C',
         }
 
         # Short string for opened door

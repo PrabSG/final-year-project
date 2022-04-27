@@ -47,6 +47,9 @@ class MiniGridEnvWrapper(Environment):
     self._env.seed(seed)
     self._is_done = False
 
+  def __str__(self) -> str:
+    return self._env.__str__()
+
   def _idx_to_action(self, idx):
     if idx == 0:
       return self._env.actions.left
@@ -137,6 +140,9 @@ class BasicEnv(Environment):
 
       self._state = np.array([5, 5], dtype=np.float)
       self._goal_state = np.array([8, 7], dtype=np.float)
+
+  def __str__(self) -> str:
+    return self._state.__str__()
 
   def _get_state(self):
     return self._state
