@@ -47,6 +47,9 @@ class MiniGridEnvWrapper(Environment):
     self._env.seed(seed)
     self._is_done = False
 
+  def __str__(self) -> str:
+    return self._env.__str__()
+
   def _idx_to_action(self, idx):
     if idx == 0:
       return self._env.actions.left

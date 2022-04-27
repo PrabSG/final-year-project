@@ -41,18 +41,21 @@ def run_agent(env, agent, args):
   trace = []
 
   observation = env.get_observation()
+  str_grid = str(env)
 
   while not env.is_complete() and timestep <= args.max_episode_length:
     action = agent.choose_action(observation)
     new_observation, reward, done, _ = env.step(action)
+    new_str_grid = str(env)
 
-    trace.append((observation, action, reward, new_observation))
+    trace.append((str_grid, action, reward, new_str_grid))
 
     timestep += 1
     observation = new_observation
+    str_grid = new_str_grid
 
   for s, a, r, new_s in trace:
-    print("State:", s, "Action:", a, "Reward:", r, "New State:", new_s)
+    print("State:\n", s, "\nAction:", a, "Reward:", r, "\nNew State:\n", new_s)
 
 
 if __name__ == "__main__":
