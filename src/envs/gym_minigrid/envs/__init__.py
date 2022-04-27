@@ -19,4 +19,4 @@ from gym_minigrid.envs.crossing import *
 from gym_minigrid.envs.lavagap import *
 from gym_minigrid.envs.dynamicobstacles import *
 from gym_minigrid.envs.distshift import *
-from gym_minigrid.envs.unsafecrossing import *
+from envs.gym_minigrid.envs.unsafecrossing import *

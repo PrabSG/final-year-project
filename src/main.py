@@ -1,18 +1,23 @@
 import argparse
 
 from agents.agent import RandomAgent
-from envs.env import BasicEnv
+from envs.env import BasicEnv, MiniGridEnvWrapper
+from envs.gym_minigrid.register import register
 
 AGENT_CHOICES = ["random"]
-ENV_CHOICES = ["basic"]
+ENV_CHOICES = ["basic", "unsafe-small", "unsafe-med"]
 MAX_EPISODE_LENGTH = 100
 MAX_TIME_STEPS = 100
 
-def init_env(env_type):
-  if env_type == "basic":
+def init_env(args):
+  if args.env == "basic":
     return BasicEnv()
+  elif args.env == "unsafe-small":
+    return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingN1-v0")
+  elif args.env == "unsafe-med":
+    return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingN2-v0")
   else:
-    raise ValueError(f"Environment Type '{env_type}' not defined.")
+    raise ValueError(f"Environment Type '{args.env}' not defined.")
 
 def init_agent(agent_type, env):
   if agent_type == "random":
@@ -20,15 +25,15 @@ def init_agent(agent_type, env):
   else:
     raise ValueError(f"Agent Type '{agent_type}' not defined.")
 
-def initialise(cl_args):
-  env = init_env(cl_args.env)
-  agent = init_agent(cl_args.agent, env)
+def initialise(args):
+  env = init_env(args)
+  agent = init_agent(args.agent, env)
   return env, agent
 
-def train_agent(env, agent, cl_args):
+def train_agent(env, agent, args):
   agent.train(env)
 
-def run_agent(env, agent, cl_args):
+def run_agent(env, agent, args):
   env.reset()
 
   timestep = 0
@@ -37,9 +42,9 @@ def run_agent(env, agent, cl_args):
 
   observation = env.get_observation()
 
-  while not env.is_complete() and timestep <= cl_args.max_episode_length:
+  while not env.is_complete() and timestep <= args.max_episode_length:
     action = agent.choose_action(observation)
-    new_observation, reward = env.step(action)
+    new_observation, reward, done, _ = env.step(action)
 
     trace.append((observation, action, reward, new_observation))
 
@@ -57,7 +62,18 @@ if __name__ == "__main__":
   parser.add_argument("--disable-cuda", action="store_false", help="Disable CUDA")
   parser.add_argument("--max-episode-length", type=int, default=MAX_EPISODE_LENGTH, help="Maximum number of steps per episode")
 
-  cl_args = parser.parse_args()
-  env, agent = initialise(cl_args)
-  train_agent(env, agent, cl_args)
-  run_agent(env, agent, cl_args)
+  # TODO: Figure out how to correctly register environments
+  register(
+    id="MiniGrid-UnsafeCrossingN1-v0",
+    entry_point="envs.gym_minigrid.envs:UnsafeCrossingSmallEnv"
+  )
+
+  register(
+    id="MiniGrid-UnsafeCrossingN2-v0",
+    entry_point="envs.gym_minigrid.envs:UnsafeCrossingMedEnv"
+  )
+
+  args = parser.parse_args()
+  env, agent = initialise(args)
+  train_agent(env, agent, args)
+  run_agent(env, agent, args)

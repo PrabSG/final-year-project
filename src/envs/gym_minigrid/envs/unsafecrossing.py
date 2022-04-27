@@ -74,12 +74,13 @@ class UnsafeCrossingMedEnv(UnsafeCrossingEnv):
   def __init__(self):
     super().__init__(num_crossings=2, obstacle_types=["lava", "glass"], grid_size=9)
 
-register(
-  id="MiniGrid-UnsafeCrossingN1-v0",
-  entry_point="gym_minigrid.envs:UnsafeCrossingSmallEnv"
-)
+# TODO: Figure out how to correctly register environments without leaving these commented out
+# register(
+#   id="MiniGrid-UnsafeCrossingN1-v0",
+#   entry_point="gym_minigrid.envs:UnsafeCrossingSmallEnv"
+# )
 
-register(
-  id="MiniGrid-UnsafeCrossingN2-v0",
-  entry_point="gym_minigrid.envs:UnsafeCrossingMedEnv"
-)
+# register(
+#   id="MiniGrid-UnsafeCrossingN2-v0",
+#   entry_point="gym_minigrid.envs:UnsafeCrossingMedEnv"
+# )
