@@ -4,7 +4,6 @@ import random
 import numpy as np
 import gym
 
-
 class Environment(ABC):
   
   @abstractmethod
@@ -48,6 +47,28 @@ class MiniGridEnvWrapper(Environment):
     self._env.seed(seed)
     self._is_done = False
 
+  def _idx_to_action(self, idx):
+    if idx == 0:
+      return self._env.actions.left
+    elif idx == 1:
+      return self._env.actions.right
+    elif idx == 2:
+      return self._env.actions.forward
+    elif idx == 3:
+      return self._env.actions.pickup
+    elif idx == 4:
+      return self._env.actions.drop
+    elif idx == 5:
+      return self._env.actions.toggle
+    elif idx == 6:
+      return self._env.actions.done
+    else:
+      raise IndexError()
+
+  def _one_hot_to_action_enum(self, action):
+    a_idx = np.argmax(action)
+    return self._idx_to_action(a_idx)
+
   def _get_state(self):
     return self._env.grid
 
@@ -55,7 +76,8 @@ class MiniGridEnvWrapper(Environment):
     return self._env.gen_obs()
   
   def step(self, action):
-    obs, reward, done, info = self._env.step(action)
+    enum_action = self._one_hot_to_action_enum(action)
+    obs, reward, done, info = self._env.step(enum_action)
     self._is_done = done
     return obs, reward, done, info
   
@@ -70,7 +92,7 @@ class MiniGridEnvWrapper(Environment):
     if not random_start and seed is not None:
       self._env.seed(seed)
     
-    self.env.reset()
+    self._env.reset()
 
   def close(self):
     self._env.close()
