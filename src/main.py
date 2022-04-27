@@ -63,6 +63,7 @@ def visualise_agent(env, agent, args):
     from array2gif import write_gif
     frames = []
 
+  # TODO: Add render function to environment interface to work with non-minigrid envs.
   env._env.render('human')
 
   for _ in range(args.vis_eps):
