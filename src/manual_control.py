@@ -3,9 +3,9 @@ import time
 import argparse
 import numpy as np
 import gym
-import envs.gym_minigrid as gym_minigrid
-from envs.gym_minigrid.wrappers import *
-from envs.gym_minigrid.window import Window
+import gym_minigrid
+from gym_minigrid.register import register
+from gym_minigrid.window import Window
 
 def redraw(img):
     if not args.agent_view:

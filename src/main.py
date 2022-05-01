@@ -4,7 +4,7 @@ import numpy as np
 
 from agents.agent import RandomAgent
 from envs.env import BasicEnv, MiniGridEnvWrapper
-from envs.gym_minigrid.register import register
+# from gym_minigrid.register import register
 
 AGENT_CHOICES = ["random"]
 ENV_CHOICES = ["basic", "unsafe-small", "unsafe-med"]
@@ -103,19 +103,6 @@ if __name__ == "__main__":
   parser.add_argument("--vis-eps", type=int, default=VISUALISATION_EPISODES, help="Number of episodes to visualise")
 
   args = parser.parse_args()
-
-  # TODO: Figure out how to correctly register environments
-  register(
-    id="MiniGrid-UnsafeCrossingN1-v0",
-    entry_point="envs.gym_minigrid.envs:UnsafeCrossingSmallEnv",
-    kwargs={"max_steps": args.max_episode_length}
-  )
-
-  register(
-    id="MiniGrid-UnsafeCrossingN2-v0",
-    entry_point="envs.gym_minigrid.envs:UnsafeCrossingMedEnv",
-    kwargs={"max_steps": args.max_episode_length}
-  )
   
   env, agent = initialise(args)
   train_agent(env, agent, args)

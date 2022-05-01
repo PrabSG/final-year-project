@@ -1,6 +1,7 @@
-from envs.gym_minigrid.minigrid import *
-from envs.gym_minigrid.register import register
+from gym_minigrid.minigrid import *
+from gym_minigrid.register import register
 
+DEF_MAX_EPISODE_LENGTH = 50
 
 class UnsafeCrossingEnv(MiniGridEnv):
   """
@@ -75,15 +76,14 @@ class UnsafeCrossingMedEnv(UnsafeCrossingEnv):
   def __init__(self, **kwargs):
     super().__init__(num_crossings=2, obstacle_types=["lava", "glass"], grid_size=9, **kwargs)
 
-# TODO: Figure out how to correctly register environments without leaving these commented out
-# register(
-#   id="MiniGrid-UnsafeCrossingN1-v0",
-#   entry_point="gym_minigrid.envs:UnsafeCrossingSmallEnv",
-#   kwargs={"max_steps": args.max_episode_length}
-# )
+register(
+  id="MiniGrid-UnsafeCrossingN1-v0",
+  entry_point="gym_minigrid.envs:UnsafeCrossingSmallEnv",
+  kwargs={"max_steps": DEF_MAX_EPISODE_LENGTH}
+)
 
-# register(
-#   id="MiniGrid-UnsafeCrossingN2-v0",
-#   entry_point="gym_minigrid.envs:UnsafeCrossingMedEnv",
-#   kwargs={"max_steps": args.max_episode_length}
-# )
+register(
+  id="MiniGrid-UnsafeCrossingN2-v0",
+  entry_point="gym_minigrid.envs:UnsafeCrossingMedEnv",
+  kwargs={"max_steps": DEF_MAX_EPISODE_LENGTH}
+)
