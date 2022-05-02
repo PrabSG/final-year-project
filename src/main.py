@@ -1,16 +1,19 @@
 import argparse
 
 import numpy as np
+import torch
 
 from agents.agent import RandomAgent
+from agents.ddqn import DDQNAgent, DDQNParams
 from envs.env import BasicEnv, MiniGridEnvWrapper
-# from gym_minigrid.register import register
+from utils import plot_training
 
-AGENT_CHOICES = ["random"]
+AGENT_CHOICES = ["random", "ddqn"]
 ENV_CHOICES = ["basic", "unsafe-small", "unsafe-med"]
-MAX_EPISODE_LENGTH = 100
-MAX_TIME_STEPS = 100
+MAX_EPISODE_LENGTH = 50
 VISUALISATION_EPISODES = 5
+
+ddqn_params = (100, 100, 10000, 256, [32, 32, 64], 0.001, 100, 0.99, 0.9, 0.05, 10)
 
 def init_env(args):
   if args.env == "basic":
@@ -25,6 +28,9 @@ def init_env(args):
 def init_agent(agent_type, env):
   if agent_type == "random":
     return RandomAgent(env.state_size, env.action_size)
+  elif agent_type == "ddqn":
+    params = DDQNParams(*ddqn_params, device=device)
+    return DDQNAgent(env.state_size, env.action_size, params)
   else:
     raise ValueError(f"Agent Type '{agent_type}' not defined.")
 
@@ -34,10 +40,11 @@ def initialise(args):
   return env, agent
 
 def train_agent(env, agent, args):
-  agent.train(env)
+  return agent.train(env)
 
 def run_agent(env, agent, args):
   env.reset()
+  agent.evaluate()
 
   timestep = 0
 
@@ -49,8 +56,8 @@ def run_agent(env, agent, args):
   while not env.is_complete() and timestep <= args.max_episode_length:
     action = agent.choose_action(observation)
     new_observation, reward, done, _ = env.step(action)
-    new_str_grid = str(env)
 
+    new_str_grid = str(env)
     trace.append((str_grid, action, reward, new_str_grid))
 
     timestep += 1
@@ -97,14 +104,19 @@ if __name__ == "__main__":
   parser.add_argument("--max-episode-length", type=int, default=MAX_EPISODE_LENGTH, help="Maximum number of steps per episode")
   # Agent arguments
   parser.add_argument("--agent", default="random", choices=AGENT_CHOICES, help="Agent Type")
+  parser.add_argument("--disable-cuda", action="store_true", help="Disable CUDA")
+  parser.add_argument("--max-episode-length", type=int, default=MAX_EPISODE_LENGTH, help="Maximum number of steps per episode")
   # Script options
-  parser.add_argument("--disable-cuda", action="store_false", help="Disable CUDA")
   parser.add_argument("--gif", type=str, help="Filename for visualisation episodes gif")
   parser.add_argument("--vis-eps", type=int, default=VISUALISATION_EPISODES, help="Number of episodes to visualise")
 
   args = parser.parse_args()
-  
+
+  global device
+  device = torch.device("cuda" if torch.cuda.is_available() and not args.disable_cuda else "cpu") # Configuring Pytorch
+
   env, agent = initialise(args)
-  train_agent(env, agent, args)
+  n_episodes, episode_rs, n_steps, train_losses = train_agent(env, agent, args)
+  plot_training(n_episodes, episode_rs, n_steps, train_losses)
   run_agent(env, agent, args)
   visualise_agent(env, agent, args)
