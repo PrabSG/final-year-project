@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import numpy as np
 
 from agents.agent import Agent
-from env import Environment
+from envs.env import Environment
 from replay import ExperienceReplay
 from utils import exp_decay_epsilon
 
