@@ -116,11 +116,6 @@ class DDQNAgent(Agent):
         return self._idx_to_one_hot(random.randrange(self.action_size), self.action_size)
     
     with torch.no_grad():
-      # if eps == 0:
-      #   q_vals = self._policy_net(state)
-      #   print(q_vals)
-      #   return self._to_one_hot(q_vals)
-
       return self._to_one_hot(self._policy_net(state))
 
   def choose_action(self, state, eps=0):
