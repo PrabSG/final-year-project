@@ -19,6 +19,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
     height=None,
     seed=None,
     agent_view_size=7,
+    random_crossing=True,
     **kwargs
   ):
     self.num_crossings = num_crossings
@@ -31,10 +32,12 @@ class UnsafeCrossingEnv(MiniGridEnv):
         self.obstacle_objs[t] = self.gap_objs[t]
       
     self.safe_gap_types = [obj_type for obj_type in self.gap_objs.keys() if not (obj_type in self.obstacle_types)]
+    self.random_crossing = random_crossing
     super().__init__(grid_size=grid_size, width=width, height=height, seed=seed, agent_view_size=agent_view_size, **kwargs)
 
   def _gen_grid(self, width, height):
     assert self.num_crossings <= math.ceil((width - 4) / 2)
+    assert height >= 5
     assert width % 2 == 1 and height % 2 == 1
 
     # Pick an obstacle type for this grid
@@ -53,7 +56,14 @@ class UnsafeCrossingEnv(MiniGridEnv):
     self.put_obj(Goal(), width - 2, height // 2)
 
     for n in range(self.num_crossings):
-      gaps = self._rand_subset(range(1, height - 1), 2)
+      if self.random_crossing:
+        gaps = self._rand_subset(range(1, height - 1), 2)
+      else:
+        if (height < 7):
+          spacing = 0
+        else:
+          spacing = (math.ceil((height - 2) / 2)) // 2
+        gaps = [spacing + 1, height - 1 - (spacing + 1)]
       i = 2 + (n * 2)
       for j in range(1, height - 1):
         if not (j in gaps):
@@ -68,6 +78,10 @@ class UnsafeCrossingEnv(MiniGridEnv):
       f"avoid the {self.obstacle_type} and get to the green goal square"
     )
   
+class UnsafeCrossingMicroEnv(UnsafeCrossingEnv):
+  def __init__(self, **kwargs):
+    super().__init__(num_crossings=1, obstacle_types=["lava"], grid_size=5, random_crossing=False, agent_view_size=5, **kwargs)
+
 class UnsafeCrossingSmallEnv(UnsafeCrossingEnv):
   def __init__(self, **kwargs):
     super().__init__(num_crossings=1, obstacle_types=["lava", "glass"], width=5, height=7, **kwargs)
@@ -75,6 +89,12 @@ class UnsafeCrossingSmallEnv(UnsafeCrossingEnv):
 class UnsafeCrossingMedEnv(UnsafeCrossingEnv):
   def __init__(self, **kwargs):
     super().__init__(num_crossings=2, obstacle_types=["lava", "glass"], grid_size=9, **kwargs)
+
+register(
+  id="MiniGrid-UnsafeCrossingMicro-v0",
+  entry_point="gym_minigrid.envs:UnsafeCrossingMicroEnv",
+  kwargs={"max_steps": DEF_MAX_EPISODE_LENGTH}
+)
 
 register(
   id="MiniGrid-UnsafeCrossingN1-v0",
