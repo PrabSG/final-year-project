@@ -76,7 +76,7 @@ class MiniGridEnvWrapper(Environment):
     return self._env.grid
 
   def get_observation(self):
-    return self._env.gen_obs()
+    return self._env.gen_obs()["image"]
   
   def step(self, action):
     enum_action = self._one_hot_to_action_enum(action)
@@ -106,7 +106,7 @@ class MiniGridEnvWrapper(Environment):
   
   @property
   def state_size(self):
-    return self._env.observation_space
+    return self._env.observation_space['image'].shape
 
 
 class BasicEnv(Environment):

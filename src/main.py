@@ -3,13 +3,14 @@ import argparse
 import numpy as np
 import torch
 
+import gym_minigrid # Required import for env registration
 from agents.agent import RandomAgent
 from agents.ddqn import DDQNAgent, DDQNParams
 from envs.env import BasicEnv, MiniGridEnvWrapper
 from utils import plot_training
 
 AGENT_CHOICES = ["random", "ddqn"]
-ENV_CHOICES = ["basic", "unsafe-small", "unsafe-med"]
+ENV_CHOICES = ["basic", "unsafe-micro", "unsafe-small", "unsafe-med"]
 MAX_EPISODE_LENGTH = 50
 VISUALISATION_EPISODES = 5
 
@@ -18,6 +19,8 @@ ddqn_params = (100, 100, 10000, 256, [32, 32, 64], 0.001, 100, 0.99, 0.9, 0.05, 
 def init_env(args):
   if args.env == "basic":
     return BasicEnv()
+  elif args.env == "unsafe-micro":
+    return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingMicro-v0", max_steps=args.max_episode_length)
   elif args.env == "unsafe-small":
     return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingN1-v0", max_steps=args.max_episode_length)
   elif args.env == "unsafe-med":
@@ -29,7 +32,7 @@ def init_agent(agent_type, env):
   if agent_type == "random":
     return RandomAgent(env.state_size, env.action_size)
   elif agent_type == "ddqn":
-    params = DDQNParams(*ddqn_params, device=device)
+    params = DDQNParams(*ddqn_params, encoding_size=32, cnn_channels=[8, 16, 16], cnn_kernels=[3, 3, 5], device=device)
     return DDQNAgent(env.state_size, env.action_size, params)
   else:
     raise ValueError(f"Agent Type '{agent_type}' not defined.")
@@ -105,7 +108,6 @@ if __name__ == "__main__":
   # Agent arguments
   parser.add_argument("--agent", default="random", choices=AGENT_CHOICES, help="Agent Type")
   parser.add_argument("--disable-cuda", action="store_true", help="Disable CUDA")
-  parser.add_argument("--max-episode-length", type=int, default=MAX_EPISODE_LENGTH, help="Maximum number of steps per episode")
   # Script options
   parser.add_argument("--gif", type=str, help="Filename for visualisation episodes gif")
   parser.add_argument("--vis-eps", type=int, default=VISUALISATION_EPISODES, help="Number of episodes to visualise")
