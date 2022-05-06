@@ -14,7 +14,7 @@ def exp_decay_epsilon(eps_start, eps_end, eps_decay):
 
   return exp_eps_func
 
-def plot_training(n_episodes, episode_rs, n_steps, train_losses):
+def plot_training(n_episodes, episode_rs, n_steps, train_losses, filename):
   fig, axs = plt.subplots(2, figsize=(8, 6))
   axs[0].plot(range(n_episodes), episode_rs, label="Episode Rewards")
   axs[0].set_title("Episode Rewards")
@@ -22,4 +22,4 @@ def plot_training(n_episodes, episode_rs, n_steps, train_losses):
   axs[1].set_title("Training Losses")
 
   plt.show()
-  plt.savefig('./training_plots_deterministic')
+  plt.savefig(filename)

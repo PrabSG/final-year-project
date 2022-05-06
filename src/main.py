@@ -15,7 +15,7 @@ MAX_EPISODE_LENGTH = 50
 NUM_TRAINING_EPISODES = 100
 VISUALISATION_EPISODES = 5
 
-ddqn_params = (10000, 256, [32, 32, 64], 0.005, 250, 0.99, 0.9, 0.05, 25)
+ddqn_params = (1000, 256, [32, 32, 64], 0.005, 250, 0.9, 0.9, 0.05, 25)
 
 def init_env(args):
   if args.env == "basic":
@@ -111,6 +111,7 @@ if __name__ == "__main__":
   parser.add_argument("--train-episodes", type=int, default=NUM_TRAINING_EPISODES, help="Number of episodes allocated for training the agent")
   parser.add_argument("--disable-cuda", action="store_true", help="Disable CUDA")
   # Script options
+  parser.add_argument("--plot", type=str, help="Filename for training losses plot")
   parser.add_argument("--gif", type=str, help="Filename for visualisation episodes gif")
   parser.add_argument("--vis-eps", type=int, default=VISUALISATION_EPISODES, help="Number of episodes to visualise")
 
@@ -121,6 +122,6 @@ if __name__ == "__main__":
 
   env, agent = initialise(args)
   n_episodes, episode_rs, n_steps, train_losses = train_agent(env, agent, args)
-  plot_training(n_episodes, episode_rs, n_steps, train_losses)
+  plot_training(n_episodes, episode_rs, n_steps, train_losses, args.plot)
   run_agent(env, agent, args)
   visualise_agent(env, agent, args)
