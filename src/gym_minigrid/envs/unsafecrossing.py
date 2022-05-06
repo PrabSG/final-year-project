@@ -38,11 +38,11 @@ class UnsafeCrossingEnv(MiniGridEnv):
       else:
         self.obstacle_objs[t] = self.gap_objs[t]
       
-    self.actions = UnsafeCrossingEnv.Actions
 
     self.safe_gap_types = [obj_type for obj_type in self.gap_objs.keys() if not (obj_type in self.obstacle_types)]
     self.random_crossing = random_crossing
     super().__init__(grid_size=grid_size, width=width, height=height, seed=seed, agent_view_size=agent_view_size, **kwargs)
+    self.actions = UnsafeCrossingEnv.Actions
 
   def _gen_grid(self, width, height):
     assert self.num_crossings <= math.ceil((width - 4) / 2)
@@ -79,8 +79,8 @@ class UnsafeCrossingEnv(MiniGridEnv):
           self.put_obj(Wall(), i, j)
         
       # TODO: Remove determinstic lava position
-      # safe_gap_idx = int(self._rand_bool())
-      safe_gap_idx = 0
+      safe_gap_idx = int(self._rand_bool())
+      # safe_gap_idx = 0
 
       self.put_obj(self.gap_objs[self._rand_elem(self.safe_gap_types)], i, gaps[abs(0 - safe_gap_idx)])
       self.put_obj(self.obstacle_objs[self.obstacle_type], i, gaps[abs(1 - safe_gap_idx)])
