@@ -69,7 +69,9 @@ class UnsafeCrossingEnv(MiniGridEnv):
         if not (j in gaps):
           self.put_obj(Wall(), i, j)
         
-      safe_gap_idx = int(self._rand_bool())
+      # TODO: Remove determinstic lava position
+      # safe_gap_idx = int(self._rand_bool())
+      safe_gap_idx = 0
 
       self.put_obj(self.gap_objs[self._rand_elem(self.safe_gap_types)], i, gaps[abs(0 - safe_gap_idx)])
       self.put_obj(self.obstacle_objs[self.obstacle_type], i, gaps[abs(1 - safe_gap_idx)])
@@ -77,6 +79,16 @@ class UnsafeCrossingEnv(MiniGridEnv):
     self.mission = (
       f"avoid the {self.obstacle_type} and get to the green goal square"
     )
+  
+  def _reward(self, done=True, violation=False):
+    """Override default reward function to penalise on each non-successful step."""
+    if done:
+      if violation:
+        return - (0.5 * self.steps_remaining) / self.max_steps
+      else:
+        return 1
+    else:
+      return - 0.5 / self.max_steps
   
 class UnsafeCrossingMicroEnv(UnsafeCrossingEnv):
   def __init__(self, **kwargs):

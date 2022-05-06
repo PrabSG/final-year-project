@@ -76,13 +76,14 @@ class MiniGridEnvWrapper(Environment):
     return self._env.grid
 
   def get_observation(self):
-    return self._env.gen_obs()["image"]
+    """Return image observation as C x H x W."""
+    return self._env.gen_obs()["image"].transpose(2, 0, 1)
   
   def step(self, action):
     enum_action = self._one_hot_to_action_enum(action)
     obs, reward, done, info = self._env.step(enum_action)
     self._is_done = done
-    return obs, reward, done, info
+    return obs["image"].transpose(2, 0, 1), reward, done, info
   
   def is_complete(self):
     return self._is_done
@@ -96,6 +97,7 @@ class MiniGridEnvWrapper(Environment):
       self._env.seed(seed)
     
     self._env.reset()
+    return self.get_observation()
 
   def close(self):
     self._env.close()
@@ -106,7 +108,10 @@ class MiniGridEnvWrapper(Environment):
   
   @property
   def state_size(self):
-    return self._env.observation_space['image'].shape
+    """Return image state space shape as C x H x W."""
+    img_shape = self._env.observation_space["image"].shape
+    return (img_shape[2], *img_shape[:2])
+
 
 
 class BasicEnv(Environment):

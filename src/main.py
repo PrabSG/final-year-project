@@ -12,9 +12,10 @@ from utils import plot_training
 AGENT_CHOICES = ["random", "ddqn"]
 ENV_CHOICES = ["basic", "unsafe-micro", "unsafe-small", "unsafe-med"]
 MAX_EPISODE_LENGTH = 50
+NUM_TRAINING_EPISODES = 100
 VISUALISATION_EPISODES = 5
 
-ddqn_params = (100, 100, 10000, 256, [32, 32, 64], 0.001, 100, 0.99, 0.9, 0.05, 10)
+ddqn_params = (10000, 256, [32, 32, 64], 0.005, 250, 0.99, 0.9, 0.05, 25)
 
 def init_env(args):
   if args.env == "basic":
@@ -28,18 +29,18 @@ def init_env(args):
   else:
     raise ValueError(f"Environment Type '{args.env}' not defined.")
 
-def init_agent(agent_type, env):
+def init_agent(agent_type, env, args):
   if agent_type == "random":
     return RandomAgent(env.state_size, env.action_size)
   elif agent_type == "ddqn":
-    params = DDQNParams(*ddqn_params, encoding_size=32, cnn_channels=[8, 16, 16], cnn_kernels=[3, 3, 5], device=device)
+    params = DDQNParams(args.train_episodes, args.max_episode_length, *ddqn_params, encoding_size=32, cnn_channels=[8, 16, 16], cnn_kernels=[3, 3, 5], device=device)
     return DDQNAgent(env.state_size, env.action_size, params)
   else:
     raise ValueError(f"Agent Type '{agent_type}' not defined.")
 
 def initialise(args):
   env = init_env(args)
-  agent = init_agent(args.agent, env)
+  agent = init_agent(args.agent, env, args)
   return env, agent
 
 def train_agent(env, agent, args):
@@ -107,6 +108,7 @@ if __name__ == "__main__":
   parser.add_argument("--max-episode-length", type=int, default=MAX_EPISODE_LENGTH, help="Maximum number of steps per episode")
   # Agent arguments
   parser.add_argument("--agent", default="random", choices=AGENT_CHOICES, help="Agent Type")
+  parser.add_argument("--train-episodes", type=int, default=NUM_TRAINING_EPISODES, help="Number of episodes allocated for training the agent")
   parser.add_argument("--disable-cuda", action="store_true", help="Disable CUDA")
   # Script options
   parser.add_argument("--gif", type=str, help="Filename for visualisation episodes gif")
