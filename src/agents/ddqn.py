@@ -50,21 +50,13 @@ class Basic2dEncoder(nn.Module):
 
 
 class QModel(nn.Module):
-  def __init__(self, input_shape, output_shape, layer_sizes, use_convs=False):
+  def __init__(self, input_shape, output_shape, layer_sizes):
     super().__init__()
-    self._use_convs = use_convs
-    if use_convs:
-      num_input_channels = 1 if len(input_shape) == 2 else input_shape[-1]
-      conv_sizes, lin_sizes = layer_sizes
-      self.input_conv = nn.Conv2d(num_input_channels, conv_sizes[0][0], kernel_size=conv_sizes[0][1], padding="same")
-      
-    else:
-      lin_sizes = layer_sizes
 
-    num_hidden = len(lin_sizes)
-    self.input_layer = nn.Linear(input_shape, lin_sizes[0])
-    self.hidden_layers = nn.ModuleList([nn.Linear(lin_sizes[i], lin_sizes[i+1]) for i in range(num_hidden - 1)])
-    self.output_layer = nn.Linear(lin_sizes[num_hidden - 1], output_shape)
+    num_hidden = len(layer_sizes)
+    self.input_layer = nn.Linear(input_shape, layer_sizes[0])
+    self.hidden_layers = nn.ModuleList([nn.Linear(layer_sizes[i], layer_sizes[i+1]) for i in range(num_hidden - 1)])
+    self.output_layer = nn.Linear(layer_sizes[num_hidden - 1], output_shape)
 
   def forward(self, x):
     x = F.relu(self.input_layer(x))
@@ -151,8 +143,12 @@ class DDQNAgent(Agent):
       assert params.cnn_kernels is not None
       
       self.multi_dim_input = True
-      self._policy_net_encoder = Basic2dEncoder(state_size, params.encoding_size, params.cnn_kernels, params.cnn_channels)
-      self._target_net_encoder = Basic2dEncoder(state_size, params.encoding_size, params.cnn_kernels, params.cnn_channels)
+      self._policy_net_encoder = Basic2dEncoder(
+          state_size, params.encoding_size, params.cnn_kernels, params.cnn_channels
+        ).to(self.params.device)
+      self._target_net_encoder = Basic2dEncoder(
+          state_size, params.encoding_size, params.cnn_kernels, params.cnn_channels
+        ).to(self.params.device)
       self._target_net_encoder.load_state_dict(self._policy_net_encoder.state_dict())
       input_shape = params.encoding_size
     else:
@@ -165,7 +161,8 @@ class DDQNAgent(Agent):
     self._target_net.load_state_dict(self._policy_net.state_dict())
     
     if self.multi_dim_input:
-      self._optimizer = torch.optim.Adam(itertools.chain(self._policy_net_encoder.parameters(), self._policy_net.parameters()), lr=params.lr)
+      self._optimizer = torch.optim.Adam(
+        itertools.chain(self._policy_net_encoder.parameters(), self._policy_net.parameters()), lr=params.lr)
     else:
       self._optimizer = torch.optim.Adam(self._policy_net.parameters(), lr=params.lr)
     
@@ -216,7 +213,7 @@ class DDQNAgent(Agent):
 
   def _optimize_model(self):
     if len(self._exp_replay) < self.params.batch_size:
-      return
+      return None
 
     transitions = self._exp_replay.get_sample(self.params.batch_size)
     batches = Transition(*zip(*transitions))
@@ -255,9 +252,12 @@ class DDQNAgent(Agent):
         param.grad.data.clamp_(-1, 1)
     
     self._optimizer.step()
-    return loss
+    return loss.item()
 
-  def train(self, env: Environment):
+  def train(self, env: Environment, print_logging=True):
+    if print_logging:
+      print("Training DDQN agent...")
+
     self._policy_net.train()
 
     if self.multi_dim_input:
@@ -268,14 +268,12 @@ class DDQNAgent(Agent):
     train_losses = []
 
     for i_episode in range(self.params.episodes):
+      if print_logging and (i_episode+1) % 5 == 0:
+        print(f"Agent exploring in episode {i_episode + 1}")
       env.reset(random_start=True)
 
       total_reward = 0
-      state = torch.tensor([env.get_observation()], device=self.params.device, dtype=torch.float)
-
-      if self.multi_dim_input:
-        # Observations given in dims: H x W x C
-        state = state.permute(0, 2, 3, 1)
+      state = torch.tensor(np.array([env.get_observation()]), device=self.params.device, dtype=torch.float)
 
       for t in range(self.params.max_episode_len):
         eps = self.params.eps_func(i_episode)
@@ -283,27 +281,27 @@ class DDQNAgent(Agent):
 
         next_state, reward, done, _ = env.step(action.squeeze().detach().cpu().numpy())
         total_reward += reward
-        next_state = torch.tensor([next_state], device=self.params.device, dtype=torch.float)
+        next_state = torch.tensor(np.array([next_state]), device=self.params.device, dtype=torch.float)
         reward = torch.tensor([reward], device=self.params.device, dtype=torch.float)
-
-        if self.multi_dim_input:
-          # Observations given in dims: H x W x C
-          next_state = next_state.permute(0, 2, 3, 1)
 
         self._exp_replay.add(Transition(state, action, reward, next_state, done))
 
         loss = self._optimize_model()
-        train_losses.append(loss)
+        if loss is not None:
+          train_losses.append(loss)
 
-        optimize_steps += 1
-        if optimize_steps % self.params.update_steps == 0:
-          self._update_target_network()
-        
+
+          optimize_steps += 1
+          if optimize_steps % self.params.update_steps == 0:
+            self._update_target_network()
+          
         if done:
           break
         state = next_state        
 
       episode_rewards.append(total_reward)
+      if print_logging and (i_episode+1) % 5 == 0:
+        print(f"Episode reward: {total_reward}")
     
     env.close()
     return self.params.episodes, episode_rewards, optimize_steps, train_losses
