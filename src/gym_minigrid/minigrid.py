@@ -865,12 +865,14 @@ class MiniGridEnv(gym.Env):
     def _gen_grid(self, width, height):
         assert False, "_gen_grid needs to be implemented by each environment"
 
-    def _reward(self):
+    def _reward(self, done=True, violation=False):
         """
-        Compute the reward to be given upon success
+        Compute the reward to be given upon taking step.
         """
-
-        return 1 - 0.9 * (self.step_count / self.max_steps)
+        if done:
+            return 1 - 0.9 * (self.step_count / self.max_steps)
+        else:
+            return 0
 
     def _rand_int(self, low, high):
         """
@@ -1148,7 +1150,7 @@ class MiniGridEnv(gym.Env):
     def step(self, action):
         self.step_count += 1
 
-        reward = 0
+        reward = self._reward(done=False)
         done = False
 
         # Get the position in front of the agent
@@ -1173,9 +1175,10 @@ class MiniGridEnv(gym.Env):
                 self.agent_pos = fwd_pos
             if fwd_cell != None and fwd_cell.type == 'goal':
                 done = True
-                reward = self._reward()
+                reward = self._reward(done=done)
             if fwd_cell != None and (fwd_cell.type == 'lava' or fwd_cell.type == self.obstacle_type):
                 done = True
+                reward = self._reward(done=done, violation=True)
 
         # Pick up an object
         elif action == self.actions.pickup:
