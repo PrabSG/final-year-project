@@ -15,7 +15,7 @@ MAX_EPISODE_LENGTH = 50
 NUM_TRAINING_EPISODES = 100
 VISUALISATION_EPISODES = 5
 
-ddqn_params = (1000, 256, [32, 32, 64], 0.005, 250, 0.9, 0.9, 0.05, 25)
+ddqn_params = (1000, 256, [32, 32, 64], 0.001, 100, 0.9, 0.9, 0.05, 25)
 
 def init_env(args):
   if args.env == "basic":
