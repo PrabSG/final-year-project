@@ -22,3 +22,4 @@ def plot_training(n_episodes, episode_rs, n_steps, train_losses):
   axs[1].set_title("Training Losses")
 
   plt.show()
+  plt.savefig('./training_plots_deterministic')
