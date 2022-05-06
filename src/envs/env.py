@@ -57,14 +57,14 @@ class MiniGridEnvWrapper(Environment):
       return self._env.actions.right
     elif idx == 2:
       return self._env.actions.forward
-    elif idx == 3:
-      return self._env.actions.pickup
-    elif idx == 4:
-      return self._env.actions.drop
-    elif idx == 5:
-      return self._env.actions.toggle
-    elif idx == 6:
-      return self._env.actions.done
+    # elif idx == 3:
+    #   return self._env.actions.pickup
+    # elif idx == 4:
+    #   return self._env.actions.drop
+    # elif idx == 5:
+    #   return self._env.actions.toggle
+    # elif idx == 6:
+    #   return self._env.actions.done
     else:
       raise IndexError()
 
@@ -104,7 +104,8 @@ class MiniGridEnvWrapper(Environment):
 
   @property
   def action_size(self):
-    return len(self._env.actions)
+    # return len(self._env.actions)
+    return 3
   
   @property
   def state_size(self):

@@ -146,10 +146,10 @@ class DDQNAgent(Agent):
       self._policy_net_encoder = Basic2dEncoder(
           state_size, params.encoding_size, params.cnn_kernels, params.cnn_channels
         ).to(self.params.device)
-      self._target_net_encoder = Basic2dEncoder(
-          state_size, params.encoding_size, params.cnn_kernels, params.cnn_channels
-        ).to(self.params.device)
-      self._target_net_encoder.load_state_dict(self._policy_net_encoder.state_dict())
+      # self._target_net_encoder = Basic2dEncoder(
+      #     state_size, params.encoding_size, params.cnn_kernels, params.cnn_channels
+      #   ).to(self.params.device)
+      # self._target_net_encoder.load_state_dict(self._policy_net_encoder.state_dict())
       input_shape = params.encoding_size
     else:
       self.multi_dim_input = False
@@ -157,8 +157,8 @@ class DDQNAgent(Agent):
 
 
     self._policy_net = QModel(input_shape, self.action_size, params.nn_sizes).to(self.params.device)
-    self._target_net = QModel(input_shape, self.action_size, params.nn_sizes).to(self.params.device)
-    self._target_net.load_state_dict(self._policy_net.state_dict())
+    # self._target_net = QModel(input_shape, self.action_size, params.nn_sizes).to(self.params.device)
+    # self._target_net.load_state_dict(self._policy_net.state_dict())
     
     if self.multi_dim_input:
       self._optimizer = torch.optim.Adam(
@@ -235,7 +235,8 @@ class DDQNAgent(Agent):
     with torch.no_grad():
       if np.sum(non_terminal_mask) > 0:
         argmax_q_idx = self._policy_net_pass(non_terminal_next_states).argmax(1).detach()
-        q_vals = self._target_net_pass(non_terminal_next_states).detach()
+        # q_vals = self._target_net_pass(non_terminal_next_states).detach()
+        q_vals = self._policy_net_pass(non_terminal_next_states).detach()
         next_state_vals[non_terminal_mask] = q_vals[range(q_vals.shape[0]), argmax_q_idx]
     
     expected_qs = (next_state_vals * self.params.gamma) + reward_batch
@@ -292,8 +293,8 @@ class DDQNAgent(Agent):
 
 
           optimize_steps += 1
-          if optimize_steps % self.params.update_steps == 0:
-            self._update_target_network()
+          # if optimize_steps % self.params.update_steps == 0:
+          #   self._update_target_network()
           
         if done:
           break
