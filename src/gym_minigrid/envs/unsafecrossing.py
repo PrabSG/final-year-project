@@ -10,6 +10,13 @@ class UnsafeCrossingEnv(MiniGridEnv):
 
   gap_objs = {"floor": Floor(), "door": Door(color="green", is_open=True), "water": Water(), "glass": Glass()}
 
+  # Override set of possible actions
+  class Actions(IntEnum):
+    # Turn left, turn right, move forward
+    left = 0
+    right = 1
+    forward = 2
+
   def __init__(
     self,
     num_crossings,
@@ -31,6 +38,8 @@ class UnsafeCrossingEnv(MiniGridEnv):
       else:
         self.obstacle_objs[t] = self.gap_objs[t]
       
+    self.actions = UnsafeCrossingEnv.Actions
+
     self.safe_gap_types = [obj_type for obj_type in self.gap_objs.keys() if not (obj_type in self.obstacle_types)]
     self.random_crossing = random_crossing
     super().__init__(grid_size=grid_size, width=width, height=height, seed=seed, agent_view_size=agent_view_size, **kwargs)
