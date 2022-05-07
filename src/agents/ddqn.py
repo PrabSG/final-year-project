@@ -48,7 +48,6 @@ class Basic2dEncoder(nn.Module):
     num_dims = len(output.shape)
     return output.squeeze(num_dims - 1).squeeze(num_dims - 2)
 
-
 class QModel(nn.Module):
   def __init__(self, input_shape, output_shape, layer_sizes):
     super().__init__()
@@ -308,3 +307,5 @@ class DDQNAgent(Agent):
 
   def evaluate(self):
     self._policy_net.eval()
+    if self.multi_dim_input:
+      self._policy_net_encoder.eval()
