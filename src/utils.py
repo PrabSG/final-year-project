@@ -1,5 +1,5 @@
 import math
-from re import A
+
 import matplotlib.pyplot as plt
 
 class DimensionError(IndexError):
