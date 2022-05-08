@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import random
 
 import numpy as np
+import torch
 import gym
 
 class Environment(ABC):
@@ -45,8 +46,9 @@ class Environment(ABC):
 
 class MiniGridEnvWrapper(Environment):
 
-  def __init__(self, env_key, seed=None, **kwargs) -> None:
+  def __init__(self, env_key, seed=None, use_tensors=True, **kwargs) -> None:
     super().__init__()
+    self.use_tensors = use_tensors
     self._env = gym.make(env_key, **kwargs)
     self._env.seed(seed)
     self._is_done = False
@@ -73,21 +75,31 @@ class MiniGridEnvWrapper(Environment):
       raise IndexError()
 
   def _one_hot_to_action_enum(self, action):
-    a_idx = np.argmax(action)
+    if self.use_tensors:
+      a_idx = torch.argmax(action).item()
+    else:
+      a_idx = np.argmax(action)
     return self._idx_to_action(a_idx)
 
   def _get_state(self):
     return self._env.grid
 
-  def get_observation(self):
-    """Return image observation as C x H x W."""
-    return self._env.gen_obs()["image"].transpose(2, 0, 1)
+  def get_observation(self, obs=None):
+    """Return image observation as C x H x W.
+    
+    Optionally pass in raw environment observation to convert to correct format.
+    """
+    if obs is None:
+      obs = self._env.gen_obs()["image"].transpose(2, 0, 1)
+    else:
+      obs = obs["image"].transpose(2, 0, 1)
+    return torch.tensor(obs, dtype=torch.float) if self.use_tensors else obs
   
   def step(self, action):
     enum_action = self._one_hot_to_action_enum(action)
     obs, reward, done, info = self._env.step(enum_action)
     self._is_done = done
-    return obs["image"].transpose(2, 0, 1), reward, done, info
+    return self.get_observation(obs=obs), reward, done, info
   
   def is_complete(self):
     return self._is_done
