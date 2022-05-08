@@ -31,6 +31,10 @@ class Environment(ABC):
   def close(self):
     pass
 
+  @abstractmethod
+  def sample_random_action(self):
+    pass
+
   @property
   def action_size(self):
     pass
@@ -101,6 +105,12 @@ class MiniGridEnvWrapper(Environment):
 
   def close(self):
     self._env.close()
+
+  def sample_random_action(self):
+    actions = np.zeros(self.action_size)
+    chosen = random.randrange(0, self.action_size)
+    actions[chosen] = 1
+    return actions
 
   @property
   def action_size(self):
@@ -193,6 +203,12 @@ class BasicEnv(Environment):
 
   def close(self):
     pass
+
+  def sample_random_action(self):
+    actions = np.zeros(self.action_size)
+    chosen = random.randrange(0, self.action_size)
+    actions[chosen] = 1
+    return actions
 
   @property
   def action_size(self):
