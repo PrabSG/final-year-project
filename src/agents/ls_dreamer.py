@@ -21,8 +21,104 @@ from agents.ls_dreamer.planner import MPCPlanner
 from agents.ls_dreamer.memory import ExperienceReplay
 from agents.ls_dreamer.models import ActorModel, Encoder, ObservationModel, RewardModel, TransitionModel, ValueModel, ViolationModel, bottle
 
+class LSDreamerParams():
+  def __init__(self,
+               results_dir,
+               algo="dreamer",
+               seed=1,
+               symbolic_env=False,
+               max_episode_length=1000,
+               experience_size=1000000,
+               cnn_activation_function="relu",
+               dense_activation_function="elu",
+               embedding_size=32,
+               hidden_size=64,
+               belief_size=64,
+               state_size=30,
+               action_repeat=2,
+               action_noise=0.4,
+               episodes=1000,
+               seed_episodes=5,
+               collect_interval=100,
+               batch_size=50,
+               chunk_size=50,
+               worldmodel_LogProbLoss=False,
+               overshooting_distance=50,
+               overshooting_kl_distance=0,
+               overshooting_reward_scale=0,
+               global_kl_beta=0,
+               free_nats=3,
+               bit_depth=3,
+               model_learning_rate=1e-3,
+               actor_learning_rate=8e-5,
+               value_learning_rate=8e-5,
+               learning_rate_schedule=0,
+               adam_epsilon=1e-7,
+               grad_clip_norm=100.0,
+               planning_horizon=15,
+               discount=0.99,
+               optimisation_iters=10,
+               candidates=1000,
+               top_candidates=100,
+               test=False,
+               test_interval=25,
+               test_episodes=10,
+               checkpoint_interval=50,
+               checkpoint_experience=False,
+               models="",
+               experience_replay="",
+               render=False,
+               device="cpu"):
+    self.results_dir = results_dir
+    self.algo = algo
+    self.seed = seed
+    self.symbolic_env = symbolic_env
+    self.max_episode_length = max_episode_length
+    self.experience_size = experience_size
+    self.cnn_activation_function = cnn_activation_function
+    self.dense_activation_function = dense_activation_function
+    self.embedding_size = embedding_size
+    self.hidden_size = hidden_size
+    self.belief_size = belief_size
+    self.state_size = state_size
+    self.action_repeat = action_repeat
+    self.action_noise = action_noise
+    self.episodes = episodes
+    self.seed_episodes = seed_episodes
+    self.collect_interval = collect_interval
+    self.batch_size = batch_size
+    self.chunk_size = chunk_size
+    self.worldmodel_LogProbLoss = worldmodel_LogProbLoss
+    self.overshooting_distance = overshooting_distance
+    self.overshooting_kl_distance = overshooting_kl_distance
+    self.overshooting_reward_scale = overshooting_reward_scale
+    self.global_kl_beta = global_kl_beta
+    self.free_nats = free_nats
+    self.bit_depth = bit_depth
+    self.model_learning_rate = model_learning_rate
+    self.actor_learning_rate = actor_learning_rate
+    self.value_learning_rate = value_learning_rate
+    self.learning_rate_schedule = learning_rate_schedule
+    self.adam_epsilon = adam_epsilon
+    self.grad_clip_norm = grad_clip_norm
+    self.planning_horizon = planning_horizon
+    self.discount = discount
+    self.optimisation_iters = optimisation_iters
+    self.candidates = candidates
+    self.top_candidates = top_candidates
+    self.test = test
+    self.test_interval = test_interval
+    self.test_episodes = test_episodes
+    self.checkpoint_interval = checkpoint_interval
+    self.checkpoint_experience = checkpoint_experience
+    self.models = models
+    self.experience_replay = experience_replay
+    self.render = render
+    self.device = device
+    
+
 class LatentShieldedDreamer(Agent):
-  def __init__(self, params, env):
+  def __init__(self, params: LSDreamerParams, env):
     super().__init__()
 
     self.metrics = {
@@ -208,20 +304,20 @@ class LatentShieldedDreamer(Agent):
     self.metrics['actor_loss'].append(losses[3])
     self.metrics['value_loss'].append(losses[4])
     self.metrics['violation_loss'].append(losses[5])
-    lineplot(self.metrics['episodes'][-len(self.metrics['observation_loss']):], self.metrics['observation_loss'], 'observation_loss', results_dir)
-    lineplot(self.metrics['episodes'][-len(self.metrics['reward_loss']):], self.metrics['reward_loss'], 'reward_loss', results_dir)
-    lineplot(self.metrics['episodes'][-len(self.metrics['kl_loss']):], self.metrics['kl_loss'], 'kl_loss', results_dir)
-    lineplot(self.metrics['episodes'][-len(self.metrics['actor_loss']):], self.metrics['actor_loss'], 'actor_loss', results_dir)
-    lineplot(self.metrics['episodes'][-len(self.metrics['value_loss']):], self.metrics['value_loss'], 'value_loss', results_dir)
-    lineplot(self.metrics['episodes'][-len(self.metrics['violation_loss']):], self.metrics['violation_loss'], 'violation_loss', results_dir)
+    lineplot(self.metrics['episodes'][-len(self.metrics['observation_loss']):], self.metrics['observation_loss'], 'observation_loss', self.params.results_dir)
+    lineplot(self.metrics['episodes'][-len(self.metrics['reward_loss']):], self.metrics['reward_loss'], 'reward_loss', self.params.results_dir)
+    lineplot(self.metrics['episodes'][-len(self.metrics['kl_loss']):], self.metrics['kl_loss'], 'kl_loss', self.params.results_dir)
+    lineplot(self.metrics['episodes'][-len(self.metrics['actor_loss']):], self.metrics['actor_loss'], 'actor_loss', self.params.results_dir)
+    lineplot(self.metrics['episodes'][-len(self.metrics['value_loss']):], self.metrics['value_loss'], 'value_loss', self.params.results_dir)
+    lineplot(self.metrics['episodes'][-len(self.metrics['violation_loss']):], self.metrics['violation_loss'], 'violation_loss', self.params.results_dir)
 
   def _update_plot_rewards(self, t, episode, total_reward):
     self.metrics['steps'].append(t + self.metrics['steps'][-1])
     self.metrics['episodes'].append(episode)
     self.metrics['train_rewards'].append(total_reward)
-    lineplot(self.metrics['episodes'][-len(self.metrics['train_rewards']):], self.metrics['train_rewards'], 'train_rewards', results_dir)
+    lineplot(self.metrics['episodes'][-len(self.metrics['train_rewards']):], self.metrics['train_rewards'], 'train_rewards', self.params.results_dir)
 
-  def _test_agent(self, episode):
+  def _test_agent(self, env, episode):
     # Set models to eval mode
     self.transition_model.eval()
     self.observation_model.eval()
@@ -250,13 +346,13 @@ class LatentShieldedDreamer(Agent):
     # Update and plot reward metrics (and write video if applicable) and save metrics
     self.metrics['test_episodes'].append(episode)
     self.metrics['test_rewards'].append(total_rewards.tolist())
-    lineplot(self.metrics['test_episodes'], self.metrics['test_rewards'], 'test_rewards', results_dir)
-    lineplot(np.asarray(self.metrics['steps'])[np.asarray(self.metrics['test_episodes']) - 1], self.metrics['test_rewards'], 'test_rewards_steps', results_dir, xaxis='step')
+    lineplot(self.metrics['test_episodes'], self.metrics['test_rewards'], 'test_rewards', self.params.results_dir)
+    lineplot(np.asarray(self.metrics['steps'])[np.asarray(self.metrics['test_episodes']) - 1], self.metrics['test_rewards'], 'test_rewards_steps', self.params.results_dir, xaxis='step')
     if not self.params.symbolic_env:
       episode_str = str(episode).zfill(len(str(self.params.episodes)))
-      write_video(video_frames, 'test_episode_%s' % episode_str, results_dir)  # Lossy compression
-      save_image(torch.as_tensor(video_frames[-1]), os.path.join(results_dir, 'test_episode_%s.png' % episode_str))
-    torch.save(self.metrics, os.path.join(results_dir, 'metrics.pth'))
+      write_video(video_frames, 'test_episode_%s' % episode_str, self.params.results_dir)  # Lossy compression
+      save_image(torch.as_tensor(video_frames[-1]), os.path.join(self.params.results_dir, 'test_episode_%s.png' % episode_str))
+    torch.save(self.metrics, os.path.join(self.params.results_dir, 'metrics.pth'))
 
     # Set models to train mode
     self.transition_model.train()
@@ -329,7 +425,7 @@ class LatentShieldedDreamer(Agent):
       
       # Test model periodically
       if episode % self.params.test_interval == 0:
-        self._test_agent(episode)
+        self._test_agent(env, episode)
       
       # Logging
       writer.add_scalar("train_reward", self.metrics['train_rewards'][-1], self.metrics['steps'][-1])
@@ -353,9 +449,9 @@ class LatentShieldedDreamer(Agent):
                     'model_optimizer': self.model_optimizer.state_dict(),
                     'actor_optimizer': self.actor_optimizer.state_dict(),
                     'value_optimizer': self.value_optimizer.state_dict()
-                    }, os.path.join(results_dir, 'models_%d.pth' % episode))
+                    }, os.path.join(self.params.results_dir, 'models_%d.pth' % episode))
         if self.params.checkpoint_experience:
-          torch.save(self.D, os.path.join(results_dir, 'experience.pth'))  # Warning: will fail with MemoryError with large memory sizes
+          torch.save(self.D, os.path.join(self.params.results_dir, 'experience.pth'))  # Warning: will fail with MemoryError with large memory sizes
     
     # Close training environment
     env.close()
