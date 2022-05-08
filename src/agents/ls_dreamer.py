@@ -4,7 +4,7 @@ Taken from repository for 'Do Androids Dream of Electric Fences? Safe Reinforcem
 Imagination-Based Agents' by Peter He."""
 
 import os
-from agents.ls_dreamer.env import Env, EnvBatcher
+from agents.ls_dreamer.env import EnvBatcher
 from agents.ls_dreamer.utils import FreezeParameters, imagine_ahead, lambda_return, lineplot, write_video
 
 import numpy as np
@@ -31,15 +31,14 @@ class LatentShieldedDreamer(Agent):
       'violation_loss': []
     }
 
-    # TODO(@PrabSG): Check env.observation_size will work with env.state_size
-    self.D = ExperienceReplay(params.experience_size, params.symbolic_env, env.observation_size, env.action_size, params.bit_depth, params.device)
+    self.D = ExperienceReplay(params.experience_size, params.symbolic_env, env.state_size, env.action_size, params.bit_depth, params.device)
 
     # Initialise Models
     self.transition_model = TransitionModel(params.belief_size, params.state_size, env.action_size, params.hidden_size, params.embedding_size, params.dense_activation_function).to(device=params.device)
-    self.observation_model = ObservationModel(params.symbolic_env, env.observation_size, params.belief_size, params.state_size, params.embedding_size, params.cnn_activation_function).to(device=params.device)
+    self.observation_model = ObservationModel(params.symbolic_env, env.state_size, params.belief_size, params.state_size, params.embedding_size, params.cnn_activation_function).to(device=params.device)
     self.reward_model = RewardModel(params.belief_size, params.state_size, params.hidden_size, params.dense_activation_function).to(device=params.device)
     self.violation_model = ViolationModel(params.belief_size, params.state_size, params.hidden_size, params.dense_activation_function).to(device=params.device)
-    self.encoder = Encoder(params.symbolic_env, env.observation_size, params.embedding_size, params.cnn_activation_function).to(device=params.device)
+    self.encoder = Encoder(params.symbolic_env, env.state_size, params.embedding_size, params.cnn_activation_function).to(device=params.device)
     self.actor_model = ActorModel(params.belief_size, params.state_size, params.hidden_size, env.action_size, params.dense_activation_function).to(device=params.device)
     self.value_model = ValueModel(params.belief_size, params.state_size, params.hidden_size, params.dense_activation_function).to(device=params.device)
     self.param_list = list(self.transition_model.parameters()) + list(self.observation_model.parameters()) + list(self.reward_model.parameters()) + list(self.violation_model.parameters()) + list(self.encoder.parameters())
@@ -95,7 +94,8 @@ class LatentShieldedDreamer(Agent):
     if explore:
       action = torch.clamp(Normal(action.float(), self.params.action_noise).rsample(), -1, 1).to(self.params.device) # Add gaussian exploration noise on top of the sampled action
       # action = action + self.params.action_noise * torch.randn_like(action)  # Add exploration noise ε ~ p(ε) to the action
-    next_observation, reward, violation, done = env.step(action.cpu() if isinstance(env, EnvBatcher) else action[0].cpu()) # action[0].cpu())  # Perform environment step (action repeats handled internally)
+    next_observation, reward, done, info = env.step(action.cpu() if isinstance(env, EnvBatcher) else action[0].cpu()) # action[0].cpu())  # Perform environment step (action repeats handled internally)
+    violation = info['violation']
     reward -= 20 * violation
       
     return belief, posterior_state, action, next_observation, reward, violation, done
@@ -231,7 +231,8 @@ class LatentShieldedDreamer(Agent):
     self.actor_model.eval()
     self.value_model.eval()
     # Initialise parallelised test environments
-    test_envs = EnvBatcher(Env, (self.params.env, self.params.symbolic_env, self.params.seed, self.params.max_episode_length, self.params.action_repeat, self.params.bit_depth), {}, self.params.test_episodes)
+    # test_envs = EnvBatcher(Env, (self.params.env, self.params.symbolic_env, self.params.seed, self.params.max_episode_length, self.params.action_repeat, self.params.bit_depth), {}, self.params.test_episodes)
+    test_envs = EnvBatcher(self.params.args, self.params.test_episodes)
     with torch.no_grad():
       observation, total_rewards, video_frames = test_envs.reset(), np.zeros((self.params.test_episodes, )), []
       belief, posterior_state, action = torch.zeros(self.params.test_episodes, self.params.belief_size, device=self.params.device), torch.zeros(self.params.test_episodes, self.params.state_size, device=self.params.device), torch.zeros(self.params.test_episodes, env.action_size, device=self.params.device)
@@ -275,7 +276,8 @@ class LatentShieldedDreamer(Agent):
       while not done:
         # TODO(@PrabSG): Implement env sample random action function in some format
         action = env.sample_random_action()
-        next_observation, reward, violation, done = env.step(action)
+        next_observation, reward, done, info = env.step(action)
+        violation = info['violation']
         if violation:
           reward -= 20
         self.D.append(observation, action, reward, violation, done)

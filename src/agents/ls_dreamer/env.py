@@ -6,6 +6,8 @@ Imagination-Based Agents' by Peter He."""
 import numpy as np
 import torch
 
+from main import init_env
+
 # Preprocesses an observation inplace (from float32 Tensor [0, 255] to [-0.5, 0.5])
 def preprocess_observation_(observation, bit_depth):
     # Quantise to given bit depth and centre
@@ -29,9 +31,14 @@ def Env(env, symbolic, seed, max_episode_length, action_repeat, bit_depth):
 
 # Wrapper for batching environments together
 class EnvBatcher():
-    def __init__(self, env_class, env_args, env_kwargs, n):
+    # def __init__(self, env_class, env_args, env_kwargs, n):
+    #     self.n = n
+    #     self.envs = [env_class(*env_args, **env_kwargs) for _ in range(n)]
+    #     self.dones = [True] * n
+
+    def __init__(self, env_args, n):
         self.n = n
-        self.envs = [env_class(*env_args, **env_kwargs) for _ in range(n)]
+        self.envs = [init_env(env_args) for _ in range(n)]
         self.dones = [True] * n
 
     # Resets every environment and returns observation
