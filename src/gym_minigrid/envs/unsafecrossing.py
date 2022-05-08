@@ -78,9 +78,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
         if not (j in gaps):
           self.put_obj(Wall(), i, j)
         
-      # TODO: Remove determinstic lava position
       safe_gap_idx = int(self._rand_bool())
-      # safe_gap_idx = 0
 
       self.put_obj(self.gap_objs[self._rand_elem(self.safe_gap_types)], i, gaps[abs(0 - safe_gap_idx)])
       self.put_obj(self.obstacle_objs[self.obstacle_type], i, gaps[abs(1 - safe_gap_idx)])

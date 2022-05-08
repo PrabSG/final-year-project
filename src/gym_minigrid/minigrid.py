@@ -1152,6 +1152,7 @@ class MiniGridEnv(gym.Env):
 
         reward = self._reward(done=False)
         done = False
+        info = {'violation': 0}
 
         # Get the position in front of the agent
         fwd_pos = self.front_pos
@@ -1179,6 +1180,7 @@ class MiniGridEnv(gym.Env):
             if fwd_cell != None and (fwd_cell.type == 'lava' or fwd_cell.type == self.obstacle_type):
                 done = True
                 reward = self._reward(done=done, violation=True)
+                info['violation'] = 1
 
         # Pick up an object
         elif action == self.actions.pickup:
@@ -1212,7 +1214,7 @@ class MiniGridEnv(gym.Env):
 
         obs = self.gen_obs()
 
-        return obs, reward, done, {}
+        return obs, reward, done, info
 
     def gen_obs_grid(self):
         """
