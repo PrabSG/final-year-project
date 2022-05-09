@@ -6,7 +6,7 @@ Imagination-Based Agents' by Peter He."""
 import numpy as np
 import torch
 
-from main import init_env
+from envs.env import init_env
 
 # Preprocesses an observation inplace (from float32 Tensor [0, 255] to [-0.5, 0.5])
 def preprocess_observation_(observation, bit_depth):
@@ -21,13 +21,13 @@ def preprocess_observation_(observation, bit_depth):
 def postprocess_observation(observation, bit_depth):
     return np.clip(np.floor((observation + 0.5) * 2 ** bit_depth) * 2 ** (8 - bit_depth), 0, 2 ** 8 - 1).astype(np.uint8)
 
-def Env(env, symbolic, seed, max_episode_length, action_repeat, bit_depth):
-    # TODO: remove this short circuit
-    return GridEnv(env, symbolic, seed, max_episode_length, action_repeat, bit_depth)
-    if env in GYM_ENVS:
-        return GymEnv(env, symbolic, seed, max_episode_length, action_repeat, bit_depth)
-    elif env in CONTROL_SUITE_ENVS:
-        return ControlSuiteEnv(env, symbolic, seed, max_episode_length, action_repeat, bit_depth)
+# def Env(env, symbolic, seed, max_episode_length, action_repeat, bit_depth):
+#     # TODO: remove this short circuit
+#     return GridEnv(env, symbolic, seed, max_episode_length, action_repeat, bit_depth)
+#     if env in GYM_ENVS:
+#         return GymEnv(env, symbolic, seed, max_episode_length, action_repeat, bit_depth)
+#     elif env in CONTROL_SUITE_ENVS:
+#         return ControlSuiteEnv(env, symbolic, seed, max_episode_length, action_repeat, bit_depth)
 
 # Wrapper for batching environments together
 class EnvBatcher():

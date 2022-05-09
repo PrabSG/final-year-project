@@ -13,7 +13,8 @@ from torch import nn, optim
 from torch.distributions import Normal
 from torch.distributions.kl import kl_divergence
 from torch.nn import functional as F
-from torchvision.utils import make_grid, save_image
+# TODO(@PrabSG): Fix torchvision versioning
+# from torchvision.utils import make_grid, save_image
 from tqdm import tqdm
 
 from agents.agent import Agent
@@ -44,7 +45,7 @@ class LSDreamerParams():
                chunk_size=50,
                worldmodel_LogProbLoss=False,
                overshooting_distance=50,
-               overshooting_kl_distance=0,
+               overshooting_kl_beta=0,
                overshooting_reward_scale=0,
                global_kl_beta=0,
                free_nats=3,
@@ -57,6 +58,7 @@ class LSDreamerParams():
                grad_clip_norm=100.0,
                planning_horizon=15,
                discount=0.99,
+               disclaim=0.95,
                optimisation_iters=10,
                candidates=1000,
                top_candidates=100,
@@ -90,7 +92,7 @@ class LSDreamerParams():
     self.chunk_size = chunk_size
     self.worldmodel_LogProbLoss = worldmodel_LogProbLoss
     self.overshooting_distance = overshooting_distance
-    self.overshooting_kl_distance = overshooting_kl_distance
+    self.overshooting_kl_beta = overshooting_kl_beta
     self.overshooting_reward_scale = overshooting_reward_scale
     self.global_kl_beta = global_kl_beta
     self.free_nats = free_nats
@@ -103,6 +105,7 @@ class LSDreamerParams():
     self.grad_clip_norm = grad_clip_norm
     self.planning_horizon = planning_horizon
     self.discount = discount
+    self.disclaim = disclaim
     self.optimisation_iters = optimisation_iters
     self.candidates = candidates
     self.top_candidates = top_candidates
@@ -121,6 +124,7 @@ class LatentShieldedDreamer(Agent):
   def __init__(self, params: LSDreamerParams, env):
     super().__init__()
 
+    self.params = params
     self.metrics = {
       'steps': [], 'episodes': [], 'train_rewards': [], 'test_episodes': [], 'test_rewards': [],
       'observation_loss': [], 'reward_loss': [], 'kl_loss': [], 'actor_loss': [], 'value_loss': [],
@@ -272,7 +276,7 @@ class LatentShieldedDreamer(Agent):
       with FreezeParameters(model_modules + self.value_model.modules):
         imged_reward = bottle(self.reward_model, (imged_beliefs, imged_prior_states))
         value_pred = bottle(self.value_model, (imged_beliefs, imged_prior_states))
-      returns = lambda_return(imged_reward, value_pred, bootstrap=value_pred[-1], discount=self.params.discount, lambda_=self.params.disclam)
+      returns = lambda_return(imged_reward, value_pred, bootstrap=value_pred[-1], discount=self.params.discount, lambda_=self.params.disclaim)
       actor_loss = -torch.mean(returns)
       # Update model parameters
       self.actor_optimizer.zero_grad()
@@ -370,7 +374,6 @@ class LatentShieldedDreamer(Agent):
     for s in range(1, self.params.seed_episodes + 1):
       observation, done, t = env.reset(), False, 0
       while not done:
-        # TODO(@PrabSG): Implement env sample random action function in some format
         action = env.sample_random_action()
         next_observation, reward, done, info = env.step(action)
         violation = info['violation']

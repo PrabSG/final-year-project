@@ -126,12 +126,38 @@ class VisualObservationModel(jit.ScriptModule):
     observation = self.conv4(hidden)
     return observation
 
+class VisualObservationModelSmall(jit.ScriptModule):
+  __constants__ = ['embedding_size']
+  
+  def __init__(self, belief_size, state_size, embedding_size, activation_function='relu'):
+    super().__init__()
+    self.act_fn = getattr(F, activation_function)
+    self.embedding_size = embedding_size
+    self.fc1 = nn.Linear(belief_size + state_size, embedding_size)
+    self.conv1 = nn.ConvTranspose2d(embedding_size, 128, 1, stride=1)
+    self.conv2 = nn.ConvTranspose2d(128, 64, 3, stride=1)
+    self.conv3 = nn.ConvTranspose2d(64, 32, 1, stride=1)
+    self.conv4 = nn.ConvTranspose2d(32, 3, 3, stride=1)
+    self.modules = [self.fc1, self.conv1, self.conv2, self.conv3, self.conv4]
+
+  @jit.script_method
+  def forward(self, belief, state):
+    hidden = self.fc1(torch.cat([belief, state], dim=1))  # No nonlinearity here
+    hidden = hidden.view(-1, self.embedding_size, 1, 1)
+    hidden = self.act_fn(self.conv1(hidden))
+    hidden = self.act_fn(self.conv2(hidden))
+    hidden = self.act_fn(self.conv3(hidden))
+    observation = self.conv4(hidden)
+    return observation
+
 
 def ObservationModel(symbolic, observation_size, belief_size, state_size, embedding_size, activation_function='relu'):
   if symbolic:
     return SymbolicObservationModel(observation_size, belief_size, state_size, embedding_size, activation_function)
-  else:
+  elif observation_size == (3, 64, 64):
     return VisualObservationModel(belief_size, state_size, embedding_size, activation_function)
+  else:
+    return VisualObservationModelSmall(belief_size, state_size, embedding_size, activation_function)
 
 
 class RewardModel(jit.ScriptModule):
@@ -192,6 +218,8 @@ class ValueModel(jit.ScriptModule):
     return reward
 
 class ActorModel(jit.ScriptModule):
+  __constants__ = ['_min_std', '_init_std', '_mean_scale']
+
   def __init__(self, belief_size, state_size, hidden_size, action_size, dist='tanh_normal',
                 activation_function='elu', min_std=1e-4, init_std=5, mean_scale=5):
     super().__init__()
@@ -319,11 +347,37 @@ class VisualEncoder(jit.ScriptModule):
     return hidden
 
 
+class VisualEncoderSmall(jit.ScriptModule):
+  __constants__ = ['embedding_size']
+  
+  def __init__(self, embedding_size, activation_function='relu'):
+    super().__init__()
+    self.act_fn = getattr(F, activation_function)
+    self.embedding_size = embedding_size
+    self.conv1 = nn.Conv2d(3, 32, 3, stride=1, padding='same')
+    self.conv2 = nn.Conv2d(32, 64, 3, stride=1, padding='same')
+    self.conv3 = nn.Conv2d(64, 128, 3, stride=1)
+    self.conv4 = nn.Conv2d(128, 256, 3, stride=1)
+    self.fc = nn.Identity() if embedding_size == 256 else nn.Linear(256, embedding_size)
+    self.modules = [self.conv1, self.conv2, self.conv3, self.conv4]
+
+  @jit.script_method
+  def forward(self, observation):
+    hidden = self.act_fn(self.conv1(observation))
+    hidden = self.act_fn(self.conv2(hidden))
+    hidden = self.act_fn(self.conv3(hidden))
+    hidden = self.act_fn(self.conv4(hidden))
+    hidden = hidden.view(-1, 256)
+    hidden = self.fc(hidden)  # Identity if embedding size is 256 else linear projection
+    return hidden
+
 def Encoder(symbolic, observation_size, embedding_size, activation_function='relu'):
   if symbolic:
     return SymbolicEncoder(observation_size, embedding_size, activation_function)
-  else:
+  elif observation_size == (3, 64, 64):
     return VisualEncoder(embedding_size, activation_function)
+  else:
+    return VisualEncoderSmall(embedding_size, activation_function)
 
 
 # "atanh", "TanhBijector" and "SampleDist" are from the following repo
@@ -335,6 +389,8 @@ class TanhBijector(torch.distributions.Transform):
     def __init__(self):
         super().__init__()
         self.bijective = True
+        self.domain = torch.distributions.constraints.real
+        self.codomain = torch.distributions.constraints.interval(-1.0, 1.0)
 
     @property
     def sign(self): return 1.

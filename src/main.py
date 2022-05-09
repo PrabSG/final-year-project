@@ -1,15 +1,17 @@
 import argparse
+import os
 
 import numpy as np
 import torch
+from agents.ls_dreamer import LSDreamerParams, LatentShieldedDreamer
 
 import gym_minigrid # Required import for env registration
 from agents.agent import RandomAgent
 from agents.ddqn import DDQNAgent, DDQNParams
-from envs.env import BasicEnv, MiniGridEnvWrapper
+from envs.env import init_env, BasicEnv, MiniGridEnvWrapper
 from utils import plot_training
 
-AGENT_CHOICES = ["random", "ddqn"]
+AGENT_CHOICES = ["random", "ddqn", "ls-dreamer"]
 ENV_CHOICES = ["basic", "unsafe-micro", "unsafe-small", "unsafe-med"]
 MAX_EPISODE_LENGTH = 50
 NUM_TRAINING_EPISODES = 100
@@ -17,17 +19,6 @@ VISUALISATION_EPISODES = 5
 
 ddqn_params = (1000, 256, [32, 32, 64], 0.001, 100, 0.9, 0.9, 0.05, 25)
 
-def init_env(args):
-  if args.env == "basic":
-    return BasicEnv()
-  elif args.env == "unsafe-micro":
-    return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingMicro-v0", max_steps=args.max_episode_length)
-  elif args.env == "unsafe-small":
-    return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingN1-v0", max_steps=args.max_episode_length)
-  elif args.env == "unsafe-med":
-    return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingN2-v0", max_steps=args.max_episode_length)
-  else:
-    raise ValueError(f"Environment Type '{args.env}' not defined.")
 
 def init_agent(agent_type, env, args):
   if agent_type == "random":
@@ -35,6 +26,11 @@ def init_agent(agent_type, env, args):
   elif agent_type == "ddqn":
     params = DDQNParams(args.train_episodes, args.max_episode_length, *ddqn_params, encoding_size=32, cnn_channels=[8, 16, 16], cnn_kernels=[3, 3, 5], device=device)
     return DDQNAgent(env.state_size, env.action_size, params)
+  elif agent_type == "ls-dreamer":
+    results_dir = os.path.join('../results/results', '{}_{}'.format(args.env, args.id))
+    os.makedirs(results_dir, exist_ok=True)
+    params = LSDreamerParams(results_dir, device=device)
+    return LatentShieldedDreamer(params, env)
   else:
     raise ValueError(f"Agent Type '{agent_type}' not defined.")
 
@@ -111,6 +107,7 @@ if __name__ == "__main__":
   parser.add_argument("--train-episodes", type=int, default=NUM_TRAINING_EPISODES, help="Number of episodes allocated for training the agent")
   parser.add_argument("--disable-cuda", action="store_true", help="Disable CUDA")
   # Script options
+  parser.add_argument("--id", type=str, help="ID for results of run")
   parser.add_argument("--plot", type=str, help="Filename for training losses plot")
   parser.add_argument("--gif", type=str, help="Filename for visualisation episodes gif")
   parser.add_argument("--vis-eps", type=int, default=VISUALISATION_EPISODES, help="Number of episodes to visualise")
