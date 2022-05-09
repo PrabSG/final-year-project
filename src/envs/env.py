@@ -5,6 +5,18 @@ import numpy as np
 import torch
 import gym
 
+def init_env(args):
+  if args.env == "basic":
+    return BasicEnv()
+  elif args.env == "unsafe-micro":
+    return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingMicro-v0", max_steps=args.max_episode_length)
+  elif args.env == "unsafe-small":
+    return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingN1-v0", max_steps=args.max_episode_length)
+  elif args.env == "unsafe-med":
+    return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingN2-v0", max_steps=args.max_episode_length)
+  else:
+    raise ValueError(f"Environment Type '{args.env}' not defined.")
+
 class Environment(ABC):
   
   @abstractmethod
@@ -119,10 +131,10 @@ class MiniGridEnvWrapper(Environment):
     self._env.close()
 
   def sample_random_action(self):
-    actions = np.zeros(self.action_size)
+    actions = torch.zeros(self.action_size, dtype=torch.float)
     chosen = random.randrange(0, self.action_size)
-    actions[chosen] = 1
-    return actions
+    actions[chosen] = 1.0
+    return actions if self.use_tensors else actions.numpy()
 
   @property
   def action_size(self):
