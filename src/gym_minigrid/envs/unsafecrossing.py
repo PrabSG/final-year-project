@@ -91,12 +91,13 @@ class UnsafeCrossingEnv(MiniGridEnv):
     """Override default reward function to penalise on each non-successful step."""
     if done:
       if violation:
-        return - (0.5 * self.steps_remaining) / self.max_steps
+        return - 0.5
+        # return - (0.5 * self.steps_remaining) / self.max_steps
       else:
-        return 1
+        return 100
     else:
-      return - 0.5 / self.max_steps
-  
+      return - 0.5
+
 class UnsafeCrossingMicroEnv(UnsafeCrossingEnv):
   def __init__(self, **kwargs):
     super().__init__(num_crossings=1, obstacle_types=["lava"], grid_size=5, random_crossing=False, agent_view_size=5, **kwargs)
