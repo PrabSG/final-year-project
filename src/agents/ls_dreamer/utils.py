@@ -6,6 +6,7 @@ Imagination-Based Agents' by Peter He."""
 import os
 from typing import Iterable
 
+import cv2
 import numpy as np
 import plotly
 from plotly.graph_objs import Scatter
