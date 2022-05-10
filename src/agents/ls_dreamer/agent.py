@@ -1,10 +1,11 @@
 """Latent Shielded Dreamer agent using Approximate Bounded Prescience for Latent Trajectories.
 
-Taken from repository for 'Do Androids Dream of Electric Fences? Safe Reinforcement Learning with
+Adapted heavily but core optimisation loop taken from repository for 'Do Androids Dream of Electric Fences? Safe Reinforcement Learning with
 Imagination-Based Agents' by Peter He."""
 
 import itertools
 import os
+from re import L
 from agents.ls_dreamer.env import EnvBatcher
 from agents.ls_dreamer.utils import FreezeParameters, imagine_ahead, lambda_return, lineplot, write_video
 
@@ -180,7 +181,7 @@ class LatentShieldedDreamer(Agent):
     belief, _, _, _, posterior_state, _, _ = self.transition_model(posterior_state, action.unsqueeze(dim=0), belief, self.encoder(observation).unsqueeze(dim=0))  # Action and observation need extra time dimension
     imagd_violation = torch.argmax(bottle(self.violation_model, (belief, posterior_state)).squeeze())
 
-    if not isinstance(violation, torch.Tensor): 
+    if not torch.is_tensor(violation):
       if violation == 1 and imagd_violation > 0.8:
         print('correctly pred violation')
       elif violation == 1 and imagd_violation < 0.8:
@@ -324,31 +325,9 @@ class LatentShieldedDreamer(Agent):
     lineplot(self.metrics['episodes'][-len(self.metrics['train_rewards']):], self.metrics['train_rewards'], 'train_rewards', self.params.results_dir)
 
   def _test_agent(self, env, episode):
-    # Set models to eval mode
-    self.transition_model.eval()
-    self.observation_model.eval()
-    self.reward_model.eval() 
-    self.violation_model.eval()
-    self.encoder.eval()
-    self.actor_model.eval()
-    self.value_model.eval()
-    # Initialise parallelised test environments
-    # test_envs = EnvBatcher(Env, (self.params.env, self.params.symbolic_env, self.params.seed, self.params.max_episode_length, self.params.action_repeat, self.params.bit_depth), {}, self.params.test_episodes)
-    test_envs = EnvBatcher(self.params.args, self.params.test_episodes)
-    with torch.no_grad():
-      observation, total_rewards, video_frames = test_envs.reset(), np.zeros((self.params.test_episodes, )), []
-      belief, posterior_state, action = torch.zeros(self.params.test_episodes, self.params.belief_size, device=self.params.device), torch.zeros(self.params.test_episodes, self.params.state_size, device=self.params.device), torch.zeros(self.params.test_episodes, env.action_size, device=self.params.device)
-      violation = torch.zeros(1,1, device=self.params.device)
-      pbar = tqdm(range(self.params.max_episode_length // self.params.action_repeat))
-      for t in pbar:
-        belief, posterior_state, action, next_observation, reward, violation, done = self._update_belief_and_act(test_envs, belief, posterior_state, action, observation.to(device=self.params.device), violation)
-        if not self.params.symbolic_env:  # Collect real vs. predicted frames for video
-          video_frames.append(make_grid(torch.cat([observation, self.observation_model(belief, posterior_state).cpu()], dim=3) + 0.5, nrow=5).numpy())  # Decentre
-        observation = next_observation
-        if done.sum().item() == self.params.test_episodes:
-          pbar.close()
-          break
-    
+
+    total_rewards, video_frames = self.run_tests(self.params.test_episodes, env, self.params.args)
+
     # Update and plot reward metrics (and write video if applicable) and save metrics
     self.metrics['test_episodes'].append(episode)
     self.metrics['test_rewards'].append(total_rewards.tolist())
@@ -360,17 +339,6 @@ class LatentShieldedDreamer(Agent):
       # write_video(video_frames, 'test_episode_%s' % episode_str, self.params.results_dir)  # Lossy compression
       save_image(torch.as_tensor(video_frames[-1]), os.path.join(self.params.results_dir, 'test_episode_%s.png' % episode_str))
     torch.save(self.metrics, os.path.join(self.params.results_dir, 'metrics.pth'))
-
-    # Set models to train mode
-    self.transition_model.train()
-    self.observation_model.train()
-    self.reward_model.train()
-    self.violation_model.train()
-    self.encoder.train()
-    self.actor_model.train()
-    self.value_model.train()
-    # Close test environments
-    test_envs.close()
 
   def train(self, env, writer=None):
     # Initialise Experience Replay D with S random seed episodes
@@ -388,14 +356,7 @@ class LatentShieldedDreamer(Agent):
       self.metrics['steps'].append(t * self.params.action_repeat + (0 if len(self.metrics['steps']) == 0 else self.metrics['steps'][-1]))
       self.metrics['episodes'].append(s)
     
-    # Set models to train mode
-    self.transition_model.train()
-    self.observation_model.train()
-    self.reward_model.train()
-    self.violation_model.train()
-    self.encoder.train()
-    self.actor_model.train()
-    self.value_model.train()
+    self.train_mode()
 
     # Training on episodes
     for episode in tqdm(range(self.metrics['episodes'][-1] + 1, self.params.episodes + 1), total=self.params.episodes, initial=self.metrics['episodes'][-1] + 1):
@@ -469,9 +430,55 @@ class LatentShieldedDreamer(Agent):
   def choose_action(self):
     return super().choose_action()
 
-  def evaluate(self):
+  def run_tests(self, n_episodes, env, args, print_logs=False):
+    self.evaluate_mode()
+
+    # Initialise parallelised test environments
+    test_envs = EnvBatcher(self.params.args, n_episodes)
+    with torch.no_grad():
+      observation, total_rewards, video_frames = test_envs.reset(), np.zeros((n_episodes, )), []
+      belief, posterior_state, action = torch.zeros(n_episodes, self.params.belief_size, device=self.params.device), torch.zeros(n_episodes, self.params.state_size, device=self.params.device), torch.zeros(n_episodes, env.action_size, device=self.params.device)
+      violation = torch.zeros(1,1, device=self.params.device)
+      pbar = tqdm(range(self.params.max_episode_length // self.params.action_repeat))
+      num_steps = torch.zeros(n_episodes, dtype=torch.long)
+      for t in pbar:
+        belief, posterior_state, action, next_observation, reward, violation, done = self._update_belief_and_act(test_envs, belief, posterior_state, action, observation.to(device=self.params.device), violation)
+        total_rewards += reward
+        num_steps[torch.logical_not(done)] += 1
+        if not self.params.symbolic_env:  # Collect real vs. predicted frames for video
+          video_frames.append(make_grid(torch.cat([observation, self.observation_model(belief, posterior_state).cpu()], dim=3) + 0.5, nrow=5).numpy())  # Decentre
+        observation = next_observation
+        if torch.all(done) == n_episodes:
+          pbar.close()
+          break
+
+    self.train_mode()
+    
+    # Close test environments
+    test_envs.close()
+
+    if print_logs:
+      for episode in range(n_episodes):
+        print(f"Episode {episode+1} total reward: {total_rewards[episode]} - {num_steps[episode]} steps")
+
+    return total_rewards, video_frames
+
+  def evaluate_mode(self):
     # Set models to eval mode
     self.transition_model.eval()
-    self.reward_model.eval()
+    self.observation_model.eval()
+    self.reward_model.eval() 
     self.violation_model.eval()
     self.encoder.eval()
+    self.actor_model.eval()
+    self.value_model.eval()
+  
+  def train_mode(self):
+    # Set models to train mode
+    self.transition_model.train()
+    self.observation_model.train()
+    self.reward_model.train()
+    self.violation_model.train()
+    self.encoder.train()
+    self.actor_model.train()
+    self.value_model.train()

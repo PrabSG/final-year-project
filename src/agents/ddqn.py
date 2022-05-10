@@ -257,10 +257,7 @@ class DDQNAgent(Agent):
     if print_logging:
       print("Training DDQN agent...")
 
-    self._policy_net.train()
-
-    if self.multi_dim_input:
-      self._policy_net_encoder.train()
+    self.train_mode()
 
     optimize_steps = 0
     metrics = {
@@ -315,7 +312,12 @@ class DDQNAgent(Agent):
     env.close()
     return self.params.episodes, metrics["episode_rewards"], optimize_steps, metrics["train_losses"]
 
-  def evaluate(self):
+  def train_mode(self):
+    self._policy_net.train()
+    if self.multi_dim_input:
+      self._policy_net_encoder.train()
+
+  def evaluate_mode(self):
     self._policy_net.eval()
     if self.multi_dim_input:
       self._policy_net_encoder.eval()

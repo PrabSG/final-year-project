@@ -46,7 +46,7 @@ class EnvBatcher():
         self.dones = dones
         violations = np.array(list(map(lambda x: x['violation'], infos)))
         observations, rewards, violations, dones = torch.cat([observation.unsqueeze(0) for observation in observations]), torch.tensor(
-            rewards, dtype=torch.float32), torch.tensor(violations, dtype=torch.float32),  torch.tensor(dones, dtype=torch.uint8)
+            rewards, dtype=torch.float32), torch.tensor(violations, dtype=torch.float32),  torch.tensor(dones, dtype=torch.bool)
         observations[done_mask] = 0
         rewards[done_mask] = 0
         violations[done_mask] = 0

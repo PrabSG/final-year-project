@@ -16,6 +16,7 @@ AGENT_CHOICES = ["random", "ddqn", "ls-dreamer"]
 ENV_CHOICES = ["basic", "unsafe-micro", "unsafe-small", "unsafe-med"]
 MAX_EPISODE_LENGTH = 50
 NUM_TRAINING_EPISODES = 100
+NUM_TESTING_EPISODES = 10
 VISUALISATION_EPISODES = 5
 
 ddqn_params = (1000, 256, [32, 32, 64], 0.001, 100, 0.9, 0.9, 0.05, 25)
@@ -40,31 +41,6 @@ def initialise(args):
 
 def train_agent(env, agent, args):
   return agent.train(env, writer=args.writer)
-
-def run_agent(env, agent, args):
-  env.reset()
-  agent.evaluate()
-
-  timestep = 0
-
-  trace = []
-
-  observation = env.get_observation()
-  str_grid = str(env)
-
-  while not env.is_complete() and timestep <= args.max_episode_length:
-    action = agent.choose_action(observation)
-    new_observation, reward, done, _ = env.step(action)
-
-    new_str_grid = str(env)
-    trace.append((str_grid, action, reward, new_str_grid))
-
-    timestep += 1
-    observation = new_observation
-    str_grid = new_str_grid
-
-  for s, a, r, new_s in trace:
-    print("State:\n", s, "\nAction:", a, "Reward:", r, "\nNew State:\n", new_s)
 
 def visualise_agent(env, agent, args):
   """Run agent in environment and visualise agent's path."""
@@ -107,6 +83,7 @@ if __name__ == "__main__":
   parser.add_argument("--disable-cuda", action="store_true", help="Disable CUDA")
   # Script options
   parser.add_argument("--id", type=str, help="ID for results of run")
+  parser.add_argument("--test-episodes", type=int, default=NUM_TESTING_EPISODES, help="Number of episodes to test the agent")
   parser.add_argument("--plot", type=str, help="Filename for training losses plot")
   parser.add_argument("--gif", type=str, help="Filename for visualisation episodes gif")
   parser.add_argument("--vis-eps", type=int, default=VISUALISATION_EPISODES, help="Number of episodes to visualise")
@@ -131,5 +108,5 @@ if __name__ == "__main__":
   train_agent(env, agent, args)
   # n_episodes, episode_rs, n_steps, train_losses = train_agent(env, agent, args)
   # plot_training(n_episodes, episode_rs, n_steps, train_losses, args.plot)
-  run_agent(env, agent, args)
+  agent.run_tests(args.test_episodes, env, args)
   visualise_agent(env, agent, args)
