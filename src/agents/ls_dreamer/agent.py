@@ -436,14 +436,14 @@ class LatentShieldedDreamer(Agent):
     # Initialise parallelised test environments
     test_envs = EnvBatcher(self.params.args, n_episodes)
     with torch.no_grad():
-      observation, total_rewards, video_frames = test_envs.reset(), np.zeros((n_episodes, )), []
+      observation, total_rewards, video_frames = test_envs.reset(), torch.zeros((n_episodes)), []
       belief, posterior_state, action = torch.zeros(n_episodes, self.params.belief_size, device=self.params.device), torch.zeros(n_episodes, self.params.state_size, device=self.params.device), torch.zeros(n_episodes, env.action_size, device=self.params.device)
       violation = torch.zeros(1,1, device=self.params.device)
       pbar = tqdm(range(self.params.max_episode_length // self.params.action_repeat))
       num_steps = torch.zeros(n_episodes, dtype=torch.long)
       for t in pbar:
         belief, posterior_state, action, next_observation, reward, violation, done = self._update_belief_and_act(test_envs, belief, posterior_state, action, observation.to(device=self.params.device), violation)
-        total_rewards += reward
+        total_rewards = total_rewards + reward
         num_steps[torch.logical_not(done)] += 1
         if not self.params.symbolic_env:  # Collect real vs. predicted frames for video
           video_frames.append(make_grid(torch.cat([observation, self.observation_model(belief, posterior_state).cpu()], dim=3) + 0.5, nrow=5).numpy())  # Decentre
