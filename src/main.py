@@ -3,11 +3,12 @@ import os
 
 import numpy as np
 import torch
-from agents.ls_dreamer import LSDreamerParams, LatentShieldedDreamer
+from torch.utils.tensorboard import SummaryWriter
 
 import gym_minigrid # Required import for env registration
 from agents.agent import RandomAgent
 from agents.ddqn import DDQNAgent, DDQNParams
+from agents.ls_dreamer import LSDreamerParams, LatentShieldedDreamer
 from envs.env import init_env, BasicEnv, MiniGridEnvWrapper
 from utils import plot_training
 
@@ -27,9 +28,7 @@ def init_agent(agent_type, env, args):
     params = DDQNParams(args.train_episodes, args.max_episode_length, *ddqn_params, encoding_size=32, cnn_channels=[8, 16, 16], cnn_kernels=[3, 3, 5], device=device)
     return DDQNAgent(env.state_size, env.action_size, params)
   elif agent_type == "ls-dreamer":
-    results_dir = os.path.join('../results/results', '{}_{}'.format(args.env, args.id))
-    os.makedirs(results_dir, exist_ok=True)
-    params = LSDreamerParams(results_dir, device=device)
+    params = LSDreamerParams(args, args.results_dir, episodes=args.train_episodes, test=True, test_interval=25, test_episodes=5, max_episode_length=args.max_episode_length, device=device)
     return LatentShieldedDreamer(params, env)
   else:
     raise ValueError(f"Agent Type '{agent_type}' not defined.")
@@ -40,7 +39,7 @@ def initialise(args):
   return env, agent
 
 def train_agent(env, agent, args):
-  return agent.train(env)
+  return agent.train(env, writer=args.writer)
 
 def run_agent(env, agent, args):
   env.reset()
@@ -114,11 +113,23 @@ if __name__ == "__main__":
 
   args = parser.parse_args()
 
+  # Set additional arguments
   global device
   device = torch.device("cuda" if torch.cuda.is_available() and not args.disable_cuda else "cpu") # Configuring Pytorch
+  print("Using device:", device)
 
+  results_dir = os.path.join('../results/', '{}_{}'.format(args.env, args.id))
+  os.makedirs(results_dir, exist_ok=True)
+  args.results_dir = results_dir
+
+  summary_name = results_dir + "/{}_{}_log"
+  writer = SummaryWriter(summary_name.format(args.env, args.id))
+  args.writer = writer
+
+  # Start running agent
   env, agent = initialise(args)
-  n_episodes, episode_rs, n_steps, train_losses = train_agent(env, agent, args)
-  plot_training(n_episodes, episode_rs, n_steps, train_losses, args.plot)
+  train_agent(env, agent, args)
+  # n_episodes, episode_rs, n_steps, train_losses = train_agent(env, agent, args)
+  # plot_training(n_episodes, episode_rs, n_steps, train_losses, args.plot)
   run_agent(env, agent, args)
   visualise_agent(env, agent, args)
