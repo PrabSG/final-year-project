@@ -430,7 +430,7 @@ class LatentShieldedDreamer(Agent):
   def choose_action(self):
     return super().choose_action()
 
-  def run_tests(self, n_episodes, env, args, print_logs=False):
+  def run_tests(self, n_episodes, env, args, print_logging=False):
     self.evaluate_mode()
 
     # Initialise parallelised test environments
@@ -453,11 +453,11 @@ class LatentShieldedDreamer(Agent):
           break
 
     self.train_mode()
-    
+
     # Close test environments
     test_envs.close()
 
-    if print_logs:
+    if print_logging:
       for episode in range(n_episodes):
         print(f"Episode {episode+1} total reward: {total_rewards[episode]} - {num_steps[episode]} steps")
 

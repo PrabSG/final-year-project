@@ -13,7 +13,7 @@ class Agent(ABC):
   def choose_action(self):
     pass
 
-  def run_tests(self, n_episodes, env, args):
+  def run_tests(self, n_episodes, env, args, print_logging=True):
     self.evaluate_mode()
 
     for i_episode in range(n_episodes):
@@ -38,8 +38,9 @@ class Agent(ABC):
         observation = new_observation
         str_grid = new_str_grid
 
-      for s, a, r, new_s in trace:
-        print("State:\n", s, "\nAction:", a, "Reward:", r, "\nNew State:\n", new_s)
+      if print_logging:
+        for s, a, r, new_s in trace:
+          print("State:\n", s, "\nAction:", a, "Reward:", r, "\nNew State:\n", new_s)
     
     self.train_mode()
 

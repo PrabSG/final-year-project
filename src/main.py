@@ -108,5 +108,5 @@ if __name__ == "__main__":
   train_agent(env, agent, args)
   # n_episodes, episode_rs, n_steps, train_losses = train_agent(env, agent, args)
   # plot_training(n_episodes, episode_rs, n_steps, train_losses, args.plot)
-  agent.run_tests(args.test_episodes, env, args)
+  agent.run_tests(args.test_episodes, env, args, print_logging=True)
   visualise_agent(env, agent, args)
