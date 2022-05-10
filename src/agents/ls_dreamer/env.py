@@ -21,21 +21,9 @@ def preprocess_observation_(observation, bit_depth):
 def postprocess_observation(observation, bit_depth):
     return np.clip(np.floor((observation + 0.5) * 2 ** bit_depth) * 2 ** (8 - bit_depth), 0, 2 ** 8 - 1).astype(np.uint8)
 
-# def Env(env, symbolic, seed, max_episode_length, action_repeat, bit_depth):
-#     # TODO: remove this short circuit
-#     return GridEnv(env, symbolic, seed, max_episode_length, action_repeat, bit_depth)
-#     if env in GYM_ENVS:
-#         return GymEnv(env, symbolic, seed, max_episode_length, action_repeat, bit_depth)
-#     elif env in CONTROL_SUITE_ENVS:
-#         return ControlSuiteEnv(env, symbolic, seed, max_episode_length, action_repeat, bit_depth)
 
 # Wrapper for batching environments together
 class EnvBatcher():
-    # def __init__(self, env_class, env_args, env_kwargs, n):
-    #     self.n = n
-    #     self.envs = [env_class(*env_args, **env_kwargs) for _ in range(n)]
-    #     self.dones = [True] * n
-
     def __init__(self, env_args, n):
         self.n = n
         self.envs = [init_env(env_args) for _ in range(n)]
@@ -43,7 +31,7 @@ class EnvBatcher():
 
     # Resets every environment and returns observation
     def reset(self):
-        observations = [env.reset() for env in self.envs]
+        observations = [env.reset().unsqueeze(0) for env in self.envs]
         self.dones = [False] * self.n
         return torch.cat(observations)
 
@@ -51,17 +39,18 @@ class EnvBatcher():
     def step(self, actions):
         # Done mask to blank out observations and zero rewards for previously terminated environments
         done_mask = torch.nonzero(torch.tensor(self.dones))[:, 0]
-        observations, rewards, violations, dones = zip(
+        observations, rewards, dones, infos = zip(
             *[env.step(action) for env, action in zip(self.envs, actions)])
         # Env should remain terminated if previously terminated
         dones = [d or prev_d for d, prev_d in zip(dones, self.dones)]
         self.dones = dones
-        observations, rewards, violations, dones = torch.cat(observations), torch.tensor(
+        violations = np.array(list(map(lambda x: x['violation'], infos)))
+        observations, rewards, violations, dones = torch.cat([observation.unsqueeze(0) for observation in observations]), torch.tensor(
             rewards, dtype=torch.float32), torch.tensor(violations, dtype=torch.float32),  torch.tensor(dones, dtype=torch.uint8)
         observations[done_mask] = 0
         rewards[done_mask] = 0
         violations[done_mask] = 0
-        return observations, rewards, violations, dones
+        return observations, rewards, dones, {'violation': violations}
 
     def close(self):
         [env.close() for env in self.envs]
