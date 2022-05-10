@@ -3,6 +3,7 @@
 Taken from repository for 'Do Androids Dream of Electric Fences? Safe Reinforcement Learning with
 Imagination-Based Agents' by Peter He."""
 
+import itertools
 import os
 from agents.ls_dreamer.env import EnvBatcher
 from agents.ls_dreamer.utils import FreezeParameters, imagine_ahead, lambda_return, lineplot, write_video
@@ -13,8 +14,7 @@ from torch import nn, optim
 from torch.distributions import Normal
 from torch.distributions.kl import kl_divergence
 from torch.nn import functional as F
-# TODO(@PrabSG): Fix torchvision versioning
-# from torchvision.utils import make_grid, save_image
+from torchvision.utils import make_grid, save_image
 from tqdm import tqdm
 
 from agents.agent import Agent
@@ -24,6 +24,7 @@ from agents.ls_dreamer.models import ActorModel, Encoder, ObservationModel, Rewa
 
 class LSDreamerParams():
   def __init__(self,
+               args,
                results_dir,
                algo="dreamer",
                seed=1,
@@ -36,7 +37,7 @@ class LSDreamerParams():
                hidden_size=64,
                belief_size=64,
                state_size=30,
-               action_repeat=2,
+               action_repeat=1,
                action_noise=0.4,
                episodes=1000,
                seed_episodes=5,
@@ -71,6 +72,7 @@ class LSDreamerParams():
                experience_replay="",
                render=False,
                device="cpu"):
+    self.args = args
     self.results_dir = results_dir
     self.algo = algo
     self.seed = seed
@@ -141,7 +143,7 @@ class LatentShieldedDreamer(Agent):
     self.encoder = Encoder(params.symbolic_env, env.state_size, params.embedding_size, params.cnn_activation_function).to(device=params.device)
     self.actor_model = ActorModel(params.belief_size, params.state_size, params.hidden_size, env.action_size, params.dense_activation_function).to(device=params.device)
     self.value_model = ValueModel(params.belief_size, params.state_size, params.hidden_size, params.dense_activation_function).to(device=params.device)
-    self.param_list = list(self.transition_model.parameters()) + list(self.observation_model.parameters()) + list(self.reward_model.parameters()) + list(self.violation_model.parameters()) + list(self.encoder.parameters())
+    self.param_list = itertools.chain(self.transition_model.parameters(), self.observation_model.parameters(), self.reward_model.parameters(), self.violation_model.parameters(), self.encoder.parameters())
     # value_actor_param_list = list(self.value_model.parameters()) + list(self.actor_model.parameters()) # TODO(@PrabSG): Check redundant
     # params_list = self.param_list + value_actor_param_list # TODO(@PrabSG): Check redundant
     self.model_optimizer = optim.Adam(self.param_list, lr=0 if params.learning_rate_schedule != 0 else params.model_learning_rate, eps=params.adam_epsilon)
@@ -222,7 +224,7 @@ class LatentShieldedDreamer(Agent):
         # TODO: implement violation loss here
       else:
         reward_loss = F.mse_loss(bottle(self.reward_model, (beliefs, posterior_states)), rewards[:-1], reduction='none').mean(dim=(0,1))
-        positive_weight, negative_weight = self.D.get_class_balancings()
+        # positive_weight, negative_weight = self.D.get_class_balancings() # TODO(@PrabSG): Unused check why
         # if episode > 50:
         violation_loss = F.cross_entropy(
           bottle(self.violation_model, (beliefs, posterior_states, )).reshape(len(violations[:-1]) * len(violations), 2), 
@@ -282,7 +284,7 @@ class LatentShieldedDreamer(Agent):
       self.actor_optimizer.zero_grad()
       actor_loss.backward()
       nn.utils.clip_grad_norm_(self.actor_model.parameters(), self.params.grad_clip_norm, norm_type=2)
-      # actor_optimizer.step() # TODO(@PrabSG): Check if optimizers should step
+      self.actor_optimizer.step() # TODO(@PrabSG): Check if optimizers should step
   
       #Dreamer implementation: value loss calculation and optimization
       with torch.no_grad():
@@ -295,19 +297,19 @@ class LatentShieldedDreamer(Agent):
       self.value_optimizer.zero_grad()
       value_loss.backward()
       nn.utils.clip_grad_norm_(self.value_model.parameters(), self.params.grad_clip_norm, norm_type=2)
-      # value_optimizer.step() # TODO(@PrabSG): Check if optimizers should step
+      self.value_optimizer.step() # TODO(@PrabSG): Check if optimizers should step
       
       # Store (0) observation loss (1) reward loss (2) KL loss (3) actor loss (4) value loss (5) violation loss
       losses.append([observation_loss.item(), reward_loss.item(), kl_loss.item(), actor_loss.item(), value_loss.item(), violation_loss.item()])
 
   def _update_plot_losses(self, losses):
     losses = tuple(zip(*losses))
-    self.metrics['observation_loss'].append(losses[0])
-    self.metrics['reward_loss'].append(losses[1])
-    self.metrics['kl_loss'].append(losses[2])
-    self.metrics['actor_loss'].append(losses[3])
-    self.metrics['value_loss'].append(losses[4])
-    self.metrics['violation_loss'].append(losses[5])
+    self.metrics['observation_loss'].append(np.mean(losses[0]))
+    self.metrics['reward_loss'].append(np.mean(losses[1]))
+    self.metrics['kl_loss'].append(np.mean(losses[2]))
+    self.metrics['actor_loss'].append(np.mean(losses[3]))
+    self.metrics['value_loss'].append(np.mean(losses[4]))
+    self.metrics['violation_loss'].append(np.mean(losses[5]))
     lineplot(self.metrics['episodes'][-len(self.metrics['observation_loss']):], self.metrics['observation_loss'], 'observation_loss', self.params.results_dir)
     lineplot(self.metrics['episodes'][-len(self.metrics['reward_loss']):], self.metrics['reward_loss'], 'reward_loss', self.params.results_dir)
     lineplot(self.metrics['episodes'][-len(self.metrics['kl_loss']):], self.metrics['kl_loss'], 'kl_loss', self.params.results_dir)
@@ -354,7 +356,8 @@ class LatentShieldedDreamer(Agent):
     lineplot(np.asarray(self.metrics['steps'])[np.asarray(self.metrics['test_episodes']) - 1], self.metrics['test_rewards'], 'test_rewards_steps', self.params.results_dir, xaxis='step')
     if not self.params.symbolic_env:
       episode_str = str(episode).zfill(len(str(self.params.episodes)))
-      write_video(video_frames, 'test_episode_%s' % episode_str, self.params.results_dir)  # Lossy compression
+      # TODO(@PrabSG): Check video output usefulness and performance impact
+      # write_video(video_frames, 'test_episode_%s' % episode_str, self.params.results_dir)  # Lossy compression
       save_image(torch.as_tensor(video_frames[-1]), os.path.join(self.params.results_dir, 'test_episode_%s.png' % episode_str))
     torch.save(self.metrics, os.path.join(self.params.results_dir, 'metrics.pth'))
 
@@ -387,9 +390,12 @@ class LatentShieldedDreamer(Agent):
     
     # Set models to train mode
     self.transition_model.train()
+    self.observation_model.train()
     self.reward_model.train()
     self.violation_model.train()
     self.encoder.train()
+    self.actor_model.train()
+    self.value_model.train()
 
     # Training on episodes
     for episode in tqdm(range(self.metrics['episodes'][-1] + 1, self.params.episodes + 1), total=self.params.episodes, initial=self.metrics['episodes'][-1] + 1):
@@ -427,17 +433,18 @@ class LatentShieldedDreamer(Agent):
         self._update_plot_rewards(t, episode, total_reward)
       
       # Test model periodically
-      if episode % self.params.test_interval == 0:
+      if self.params.test and episode % self.params.test_interval == 0:
         self._test_agent(env, episode)
       
       # Logging
-      writer.add_scalar("train_reward", self.metrics['train_rewards'][-1], self.metrics['steps'][-1])
-      writer.add_scalar("train/episode_reward", self.metrics['train_rewards'][-1], self.metrics['steps'][-1] * self.params.action_repeat)
-      writer.add_scalar("observation_loss", self.metrics['observation_loss'][0][-1], self.metrics['steps'][-1])
-      writer.add_scalar("reward_loss", self.metrics['reward_loss'][0][-1], self.metrics['steps'][-1])
-      writer.add_scalar("kl_loss", self.metrics['kl_loss'][0][-1], self.metrics['steps'][-1])
-      writer.add_scalar("actor_loss", self.metrics['actor_loss'][0][-1], self.metrics['steps'][-1])
-      writer.add_scalar("value_loss", self.metrics['value_loss'][0][-1], self.metrics['steps'][-1])  
+      if writer is not None:
+        writer.add_scalar("train_reward", self.metrics['train_rewards'][-1], self.metrics['steps'][-1])
+        writer.add_scalar("train/episode_reward", self.metrics['train_rewards'][-1], self.metrics['steps'][-1] * self.params.action_repeat)
+        writer.add_scalar("observation_loss", self.metrics['observation_loss'][-1], self.metrics['steps'][-1])
+        writer.add_scalar("reward_loss", self.metrics['reward_loss'][-1], self.metrics['steps'][-1])
+        writer.add_scalar("kl_loss", self.metrics['kl_loss'][-1], self.metrics['steps'][-1])
+        writer.add_scalar("actor_loss", self.metrics['actor_loss'][-1], self.metrics['steps'][-1])
+        writer.add_scalar("value_loss", self.metrics['value_loss'][-1], self.metrics['steps'][-1])  
       print("episodes: {}, total_steps: {}, train_reward: {} ".format(self.metrics['episodes'][-1], self.metrics['steps'][-1], self.metrics['train_rewards'][-1]))
 
       # Checkpoint models
