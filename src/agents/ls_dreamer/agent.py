@@ -73,7 +73,7 @@ class LSDreamerParams():
                experience_replay="",
                render=False,
                paths_to_sample=40,
-               violation_threshold=3,
+               violation_threshold=10,
                device="cpu"):
     self.args = args
     self.results_dir = results_dir
@@ -128,6 +128,8 @@ class LSDreamerParams():
     
 
 class LatentShieldedDreamer(Agent):
+  VIOLATION_REWARD_SCALING = 50
+
   def __init__(self, params: LSDreamerParams, env):
     super().__init__()
 
@@ -204,15 +206,17 @@ class LatentShieldedDreamer(Agent):
     if explore:
       action = torch.clamp(Normal(action.float(), self.params.action_noise).rsample(), -1, 1).to(self.params.device) # Add gaussian exploration noise on top of the sampled action
       # action = action + self.params.action_noise * torch.randn_like(action)  # Add exploration noise ε ~ p(ε) to the action
-    shield_action, shield_interfered = shield.step(belief, posterior_state, action, self.observation_model, self.planner, observation, self.encoder)
+    shield_interfered = False
     # if episode > 60 or (episode > 10 and episode < 40 and episode % 2 == 0) or (episode >= 40 and episode % 2 == 0 and episode % 3 == 0):
-    if episode > 20 or (episode > 10 and episode % 2 == 0):
+    shield_action, shield_interfered = shield.step(belief, posterior_state, action, self.observation_model, self.planner, observation, self.encoder)
+    if episode > 60 or (episode > 40 and episode % 2 == 0):
       action = shield_action.to(device=self.params.device)
       if shield_interfered:
         print('interfered')
     next_observation, reward, done, info = env.step(action.cpu() if isinstance(env, EnvBatcher) else action[0].cpu()) # action[0].cpu())  # Perform environment step (action repeats handled internally)
     violation = info['violation']
-    reward -= 40 if shield_interfered or violation else 0
+    if shield_interfered or (torch.any(violation) if torch.is_tensor(violation) else violation):
+      reward -= self.VIOLATION_REWARD_SCALING * violation
       
     return belief, posterior_state, action, next_observation, reward, violation, done
 
@@ -238,7 +242,6 @@ class LatentShieldedDreamer(Agent):
         # TODO: implement violation loss here
       else:
         reward_loss = F.mse_loss(bottle(self.reward_model, (beliefs, posterior_states)), rewards[:-1], reduction='none').mean(dim=(0,1))
-        # positive_weight, negative_weight = self.D.get_class_balancings() # TODO(@PrabSG): Unused check why
         # if episode > 50:
         violation_loss = F.cross_entropy(
           bottle(self.violation_model, (beliefs, posterior_states, )).reshape(len(violations[:-1]) * len(violations), 2), 
@@ -367,7 +370,7 @@ class LatentShieldedDreamer(Agent):
         next_observation, reward, done, info = env.step(action)
         violation = info['violation']
         if violation:
-          reward -= 40
+          reward -= self.VIOLATION_REWARD_SCALING
           violation_count += 1
         self.D.append(observation, action, reward, violation, done)
         observation = next_observation
