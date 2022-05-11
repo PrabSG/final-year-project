@@ -5,9 +5,6 @@ Imagination-Based Agents' by Peter He."""
 
 import itertools
 import os
-from re import L
-from agents.ls_dreamer.env import EnvBatcher
-from agents.ls_dreamer.utils import FreezeParameters, imagine_ahead, lambda_return, lineplot, write_video
 
 import numpy as np
 import torch
@@ -19,9 +16,12 @@ from torchvision.utils import make_grid, save_image
 from tqdm import tqdm
 
 from agents.agent import Agent
-from agents.ls_dreamer.planner import MPCPlanner
+from agents.ls_dreamer.bps import BoundedPrescienceShield, ShieldBatcher
+from agents.ls_dreamer.env import EnvBatcher
 from agents.ls_dreamer.memory import ExperienceReplay
 from agents.ls_dreamer.models import ActorModel, Encoder, ObservationModel, RewardModel, TransitionModel, ValueModel, ViolationModel, bottle
+from agents.ls_dreamer.planner import MPCPlanner
+from agents.ls_dreamer.utils import FreezeParameters, imagine_ahead, lambda_return, lineplot, write_video
 
 class LSDreamerParams():
   def __init__(self,
@@ -34,9 +34,9 @@ class LSDreamerParams():
                experience_size=1000000,
                cnn_activation_function="relu",
                dense_activation_function="elu",
-               embedding_size=32,
+               embedding_size=1024,
                hidden_size=64,
-               belief_size=64,
+               belief_size=200,
                state_size=30,
                action_repeat=1,
                action_noise=0.4,
@@ -72,6 +72,8 @@ class LSDreamerParams():
                models="",
                experience_replay="",
                render=False,
+               paths_to_sample=40,
+               violation_threshold=3,
                device="cpu"):
     self.args = args
     self.results_dir = results_dir
@@ -120,6 +122,8 @@ class LSDreamerParams():
     self.models = models
     self.experience_replay = experience_replay
     self.render = render
+    self.paths_to_sample = paths_to_sample
+    self.violation_threshold = violation_threshold
     self.device = device
     
 
@@ -131,7 +135,7 @@ class LatentShieldedDreamer(Agent):
     self.metrics = {
       'steps': [], 'episodes': [], 'train_rewards': [], 'test_episodes': [], 'test_rewards': [],
       'observation_loss': [], 'reward_loss': [], 'kl_loss': [], 'actor_loss': [], 'value_loss': [],
-      'violation_loss': []
+      'violation_loss': [], 'violation_count': []
     }
 
     self.D = ExperienceReplay(params.experience_size, params.symbolic_env, env.state_size, env.action_size, params.bit_depth, params.device)
@@ -168,6 +172,9 @@ class LatentShieldedDreamer(Agent):
     else:
       self.planner = MPCPlanner(env.action_size, params.planning_horizon, params.optimisation_iters, params.candidates, params.top_candidates, self.transition_model, self.reward_model)
 
+    # Initialise Shield
+    self.shield = BoundedPrescienceShield(self.transition_model, self.violation_model, violation_threshold=params.violation_threshold, paths_to_sample=params.paths_to_sample)
+
     self.global_prior = Normal(torch.zeros(params.batch_size, params.state_size, device=params.device), torch.ones(params.batch_size, params.state_size, device=params.device))  # Global prior N(0, I)
     self.free_nats = torch.full((1, ), params.free_nats, device=params.device)  # Allowed deviation in KL divergence
 
@@ -175,7 +182,7 @@ class LatentShieldedDreamer(Agent):
     # Calculate class-weighted BCE loss
     return negative_weight * (target - 1) * torch.clamp(torch.log(1 - pred), -100, 0) - positive_weight * target * torch.clamp(torch.log(pred), -100, 0)
     
-  def _update_belief_and_act(self, env, belief, posterior_state, action, observation, violation, explore=False):
+  def _update_belief_and_act(self, env, belief, posterior_state, action, observation, violation, shield, episode, explore=False):
     # Infer belief over current state q(s_t|o≤t,a<t) from the history
     # print("action size: ",action.size()) torch.Size([1, 6])
     belief, _, _, _, posterior_state, _, _ = self.transition_model(posterior_state, action.unsqueeze(dim=0), belief, self.encoder(observation).unsqueeze(dim=0))  # Action and observation need extra time dimension
@@ -197,9 +204,15 @@ class LatentShieldedDreamer(Agent):
     if explore:
       action = torch.clamp(Normal(action.float(), self.params.action_noise).rsample(), -1, 1).to(self.params.device) # Add gaussian exploration noise on top of the sampled action
       # action = action + self.params.action_noise * torch.randn_like(action)  # Add exploration noise ε ~ p(ε) to the action
+    shield_action, shield_interfered = shield.step(belief, posterior_state, action, self.observation_model, self.planner, observation, self.encoder)
+    # if episode > 60 or (episode > 10 and episode < 40 and episode % 2 == 0) or (episode >= 40 and episode % 2 == 0 and episode % 3 == 0):
+    if episode > 20 or (episode > 10 and episode % 2 == 0):
+      action = shield_action.to(device=self.params.device)
+      if shield_interfered:
+        print('interfered')
     next_observation, reward, done, info = env.step(action.cpu() if isinstance(env, EnvBatcher) else action[0].cpu()) # action[0].cpu())  # Perform environment step (action repeats handled internally)
     violation = info['violation']
-    reward -= 20 * violation
+    reward -= 40 if shield_interfered or violation else 0
       
     return belief, posterior_state, action, next_observation, reward, violation, done
 
@@ -236,8 +249,10 @@ class LatentShieldedDreamer(Agent):
         # else:
           # violation_loss = torch.zeros([1]).to(self.params.device) # TODO(@PrabSG): Check why violation loss 0 before 50 episodes
       # transition loss
-      div = kl_divergence(Normal(posterior_means, posterior_std_devs), Normal(prior_means, prior_std_devs)).sum(dim=2)
-      kl_loss = torch.max(div, self.free_nats).mean(dim=(0, 1))  # Note that normalisation by overshooting distance and weighting by overshooting distance cancel out
+      kl_loss = 0.8 * kl_divergence(Normal(posterior_means.detach(), posterior_std_devs.detach()), Normal(prior_means, prior_std_devs)).sum(dim=2)
+      kl_loss += 0.2 * kl_divergence(Normal(posterior_means, posterior_std_devs), Normal(prior_means.detach(), prior_std_devs.detach())).sum(dim=2)
+      kl_loss = kl_loss.mean(dim=(0,1))
+      # kl_loss = torch.max(div, free_nats).mean(dim=(0, 1))  # Note that normalisation by overshooting distance and weighting by overshooting distance cancel out
       if self.params.global_kl_beta != 0:
         kl_loss += self.params.global_kl_beta * kl_divergence(Normal(posterior_means, posterior_std_devs), self.global_prior).sum(dim=2).mean(dim=(0, 1))
       # Calculate latent overshooting objective for t > 0
@@ -285,7 +300,7 @@ class LatentShieldedDreamer(Agent):
       self.actor_optimizer.zero_grad()
       actor_loss.backward()
       nn.utils.clip_grad_norm_(self.actor_model.parameters(), self.params.grad_clip_norm, norm_type=2)
-      self.actor_optimizer.step() # TODO(@PrabSG): Check if optimizers should step
+      self.actor_optimizer.step()
   
       #Dreamer implementation: value loss calculation and optimization
       with torch.no_grad():
@@ -318,15 +333,17 @@ class LatentShieldedDreamer(Agent):
     lineplot(self.metrics['episodes'][-len(self.metrics['value_loss']):], self.metrics['value_loss'], 'value_loss', self.params.results_dir)
     lineplot(self.metrics['episodes'][-len(self.metrics['violation_loss']):], self.metrics['violation_loss'], 'violation_loss', self.params.results_dir)
 
-  def _update_plot_rewards(self, t, episode, total_reward):
+  def _update_plot_rewards(self, t, episode, total_reward, violations):
     self.metrics['steps'].append(t + self.metrics['steps'][-1])
     self.metrics['episodes'].append(episode)
     self.metrics['train_rewards'].append(total_reward)
+    self.metrics['violation_count'].append((episode, violations))
     lineplot(self.metrics['episodes'][-len(self.metrics['train_rewards']):], self.metrics['train_rewards'], 'train_rewards', self.params.results_dir)
+    lineplot([x for x, y in self.metrics['violation_count']], [y for x, y in self.metrics['violation_count']], 'violation_count', self.params.results_dir)
 
   def _test_agent(self, env, episode):
 
-    total_rewards, video_frames = self.run_tests(self.params.test_episodes, env, self.params.args)
+    total_rewards, video_frames = self.run_tests(self.params.test_episodes, env, self.params.args, episode=episode)
 
     # Update and plot reward metrics (and write video if applicable) and save metrics
     self.metrics['test_episodes'].append(episode)
@@ -343,16 +360,19 @@ class LatentShieldedDreamer(Agent):
   def train(self, env, writer=None):
     # Initialise Experience Replay D with S random seed episodes
     for s in range(1, self.params.seed_episodes + 1):
+      violation_count = 0
       observation, done, t = env.reset(), False, 0
       while not done:
         action = env.sample_random_action()
         next_observation, reward, done, info = env.step(action)
         violation = info['violation']
         if violation:
-          reward -= 20
+          reward -= 40
+          violation_count += 1
         self.D.append(observation, action, reward, violation, done)
         observation = next_observation
         t += 1
+      self.metrics['violation_count'].append((s, violation_count))
       self.metrics['steps'].append(t * self.params.action_repeat + (0 if len(self.metrics['steps']) == 0 else self.metrics['steps'][-1]))
       self.metrics['episodes'].append(s)
     
@@ -375,23 +395,26 @@ class LatentShieldedDreamer(Agent):
       
       # Data collection
       print("Data collection")
+      violations = 0
       with torch.no_grad():
         observation, total_reward = env.reset(), 0
         belief, posterior_state, action, violation = torch.zeros(1, self.params.belief_size, device=self.params.device), torch.zeros(1, self.params.state_size, device=self.params.device), torch.zeros(1, env.action_size, device=self.params.device), torch.zeros(1, 1, device=self.params.device)
         pbar = tqdm(range(self.params.max_episode_length // self.params.action_repeat))
         for t in pbar:
           # print("step",t)
-          belief, posterior_state, action, next_observation, reward, violation, done = self._update_belief_and_act(env, belief, posterior_state, action, observation.to(device=self.params.device), violation, explore=True)
+          belief, posterior_state, action, next_observation, reward, violation, done = self._update_belief_and_act(env, belief, posterior_state, action, observation.to(device=self.params.device), violation, self.shield, episode, explore=True)
           self.D.append(observation, action.cpu(), reward, violation, done)
           total_reward += reward
           observation = next_observation
+          if violation:
+            violations += 1
           if self.params.render:
             env.render()
           if done:
             pbar.close()
             break
         
-        self._update_plot_rewards(t, episode, total_reward)
+        self._update_plot_rewards(t, episode, total_reward, violations)
       
       # Test model periodically
       if self.params.test and episode % self.params.test_interval == 0:
@@ -406,7 +429,7 @@ class LatentShieldedDreamer(Agent):
         writer.add_scalar("kl_loss", self.metrics['kl_loss'][-1], self.metrics['steps'][-1])
         writer.add_scalar("actor_loss", self.metrics['actor_loss'][-1], self.metrics['steps'][-1])
         writer.add_scalar("value_loss", self.metrics['value_loss'][-1], self.metrics['steps'][-1])  
-      print("episodes: {}, total_steps: {}, train_reward: {} ".format(self.metrics['episodes'][-1], self.metrics['steps'][-1], self.metrics['train_rewards'][-1]))
+      print("episodes: {}, total_steps: {}, train_reward: {}, violations: {} ".format(self.metrics['episodes'][-1], self.metrics['steps'][-1], self.metrics['train_rewards'][-1]), self.metrics['violation_count'][-1][1])
 
       # Checkpoint models
       if episode % self.params.checkpoint_interval == 0:
@@ -430,11 +453,16 @@ class LatentShieldedDreamer(Agent):
   def choose_action(self):
     return super().choose_action()
 
-  def run_tests(self, n_episodes, env, args, print_logging=False):
+  def run_tests(self, n_episodes, env, args, print_logging=False, episode=None):
+    # If running tests at no particular episode, run 'after' all training episodes
+    if episode is None:
+      episode = self.params.episodes
+
     self.evaluate_mode()
 
     # Initialise parallelised test environments
     test_envs = EnvBatcher(self.params.args, n_episodes)
+    shield = ShieldBatcher(BoundedPrescienceShield, test_envs.envs, self.transition_model, self.violation_model, violation_threshold=self.params.violation_threshold, paths_to_sample=self.params.paths_to_sample)
     with torch.no_grad():
       observation, total_rewards, video_frames = test_envs.reset(), torch.zeros((n_episodes)), []
       belief, posterior_state, action = torch.zeros(n_episodes, self.params.belief_size, device=self.params.device), torch.zeros(n_episodes, self.params.state_size, device=self.params.device), torch.zeros(n_episodes, env.action_size, device=self.params.device)
@@ -442,7 +470,7 @@ class LatentShieldedDreamer(Agent):
       pbar = tqdm(range(self.params.max_episode_length // self.params.action_repeat))
       num_steps = torch.zeros(n_episodes, dtype=torch.long)
       for t in pbar:
-        belief, posterior_state, action, next_observation, reward, violation, done = self._update_belief_and_act(test_envs, belief, posterior_state, action, observation.to(device=self.params.device), violation)
+        belief, posterior_state, action, next_observation, reward, violation, done = self._update_belief_and_act(test_envs, belief, posterior_state, action, observation.to(device=self.params.device), violation, shield, episode)
         total_rewards = total_rewards + reward
         num_steps[torch.logical_not(done)] += 1
         if not self.params.symbolic_env:  # Collect real vs. predicted frames for video
