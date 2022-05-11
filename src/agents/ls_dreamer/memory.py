@@ -13,7 +13,9 @@ class ExperienceReplay():
     self.device = device
     self.symbolic_env = symbolic_env
     self.size = size
-    self.observations = np.empty((size, observation_size) if symbolic_env else (size, *observation_size), dtype=np.float32 if symbolic_env else np.uint8)
+    self.observations = np.empty(
+      (size, observation_size) if symbolic_env else (size, *observation_size),
+      dtype=np.float32 if symbolic_env else np.uint8)
     self.actions = np.empty((size, action_size), dtype=np.float32)
     self.rewards = np.empty((size, ), dtype=np.float32)
     self.violations = np.empty((size, ), dtype=np.long)
@@ -28,7 +30,9 @@ class ExperienceReplay():
     if self.symbolic_env:
       self.observations[self.idx] = observation.numpy()
     else:
-      self.observations[self.idx] = postprocess_observation(observation.numpy(), self.bit_depth)  # Decentre and discretise visual observations (to save memory)
+      self.observations[self.idx] = postprocess_observation(
+        observation.numpy(), self.bit_depth
+      )  # Decentre and discretise visual observations (to save memory)
     self.actions[self.idx] = action.numpy()
     self.rewards[self.idx] = reward
     self.violations[self.idx] = violation
@@ -52,13 +56,19 @@ class ExperienceReplay():
     observations = torch.as_tensor(self.observations[vec_idxs].astype(np.float32))
     if not self.symbolic_env:
       preprocess_observation_(observations, self.bit_depth)  # Undo discretisation for visual observations
-    return observations.reshape(L, n, *observations.shape[1:]), self.actions[vec_idxs].reshape(L, n, -1), self.rewards[vec_idxs].reshape(L, n), self.violations[vec_idxs].reshape(L, n), self.nonterminals[vec_idxs].reshape(L, n, 1)
+    return (
+      observations.reshape(L, n, *observations.shape[1:]),
+      self.actions[vec_idxs].reshape(L, n, -1),
+      self.rewards[vec_idxs].reshape(L, n),
+      self.violations[vec_idxs].reshape(L, n),
+      self.nonterminals[vec_idxs].reshape(L, n, 1)
+    )
 
   # Returns a batch of sequence chunks uniformly sampled from the memory
   def sample(self, n, L):
     batch = self._retrieve_batch(np.asarray([self._sample_idx(L) for _ in range(n)]), n, L)
     # print(np.asarray([self._sample_idx(L) for _ in range(n)]))
-    # [1578 1579 1580 ... 1625 1626 1627]                                                                                                                                        | 0/100 [00:00<?, ?it/s]
+    # [1578 1579 1580 ... 1625 1626 1627]                          | 0/100 [00:00<?, ?it/s]
     # [1049 1050 1051 ... 1096 1097 1098]
     # [1236 1237 1238 ... 1283 1284 1285]
     # ...
@@ -66,13 +76,3 @@ class ExperienceReplay():
     # [ 686  687  688 ...  733  734  735]
     # [1377 1378 1379 ... 1424 1425 1426]]
     return [torch.as_tensor(item).to(device=self.device) for item in batch]
-
-  def get_class_balancings(self, beta = 0.99):
-    total = len(self.violations)
-    non_violation_count = total - self.violation_count
-    violation_balancer = (1 - beta) / (1 - beta ** self.violation_count)
-    non_violation_balancer = (1 - beta) / (1 - beta ** non_violation_count)
-    balancer_sum = non_violation_balancer + violation_balancer
-    non_violation_balancer /= balancer_sum
-    violation_balancer /= balancer_sum
-    return violation_balancer, non_violation_balancer
