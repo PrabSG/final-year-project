@@ -429,7 +429,7 @@ class LatentShieldedDreamer(Agent):
         writer.add_scalar("kl_loss", self.metrics['kl_loss'][-1], self.metrics['steps'][-1])
         writer.add_scalar("actor_loss", self.metrics['actor_loss'][-1], self.metrics['steps'][-1])
         writer.add_scalar("value_loss", self.metrics['value_loss'][-1], self.metrics['steps'][-1])  
-      print("episodes: {}, total_steps: {}, train_reward: {}, violations: {} ".format(self.metrics['episodes'][-1], self.metrics['steps'][-1], self.metrics['train_rewards'][-1]), self.metrics['violation_count'][-1][1])
+      print("episodes: {}, total_steps: {}, train_reward: {}, violations: {} ".format(self.metrics['episodes'][-1], self.metrics['steps'][-1], self.metrics['train_rewards'][-1], self.metrics['violation_count'][-1][1]))
 
       # Checkpoint models
       if episode % self.params.checkpoint_interval == 0:
@@ -451,6 +451,7 @@ class LatentShieldedDreamer(Agent):
     env.close()
 
   def choose_action(self):
+    # TODO(@PrabSG): Deprecate this function and find better way to yield states for visualisations
     return super().choose_action()
 
   def run_tests(self, n_episodes, env, args, print_logging=False, episode=None):
