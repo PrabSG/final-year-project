@@ -454,12 +454,17 @@ class LatentShieldedDreamer(Agent):
     # TODO(@PrabSG): Deprecate this function and find better way to yield states for visualisations
     return super().choose_action()
 
-  def run_tests(self, n_episodes, env, args, print_logging=False, episode=None):
+  def run_tests(self, n_episodes, env, args, print_logging=False, visualise=False, episode=None):
     # If running tests at no particular episode, run 'after' all training episodes
     if episode is None:
       episode = self.params.episodes
 
     self.evaluate_mode()
+
+    if visualise:
+      frames = {}
+      for i in range(n_episodes):
+        frames[i] = []
 
     # Initialise parallelised test environments
     test_envs = EnvBatcher(self.params.args, n_episodes)
@@ -468,9 +473,15 @@ class LatentShieldedDreamer(Agent):
       observation, total_rewards, video_frames = test_envs.reset(), torch.zeros((n_episodes)), []
       belief, posterior_state, action = torch.zeros(n_episodes, self.params.belief_size, device=self.params.device), torch.zeros(n_episodes, self.params.state_size, device=self.params.device), torch.zeros(n_episodes, env.action_size, device=self.params.device)
       violation = torch.zeros(1,1, device=self.params.device)
+      done = torch.zeros(n_episodes, dtype=torch.bool, device=self.params.device)
       pbar = tqdm(range(self.params.max_episode_length // self.params.action_repeat))
       num_steps = torch.zeros(n_episodes, dtype=torch.long)
-      for t in pbar:
+      for t in pbar:        
+        if visualise:
+          for i in range(n_episodes):
+            if not done[i]:
+              frames[i].append(np.moveaxis(test_envs.envs[i]._env.render("rgb_array"), 2, 0))
+
         belief, posterior_state, action, next_observation, reward, violation, done = self._update_belief_and_act(test_envs, belief, posterior_state, action, observation.to(device=self.params.device), violation, shield, episode)
         total_rewards = total_rewards + reward
         num_steps[torch.logical_not(done)] += 1
@@ -490,7 +501,10 @@ class LatentShieldedDreamer(Agent):
       for episode in range(n_episodes):
         print(f"Episode {episode+1} total reward: {total_rewards[episode]} - {num_steps[episode]} steps")
 
-    return total_rewards, video_frames
+    if visualise:
+      gif_frames = np.concatenate([frames[i] for i in range(n_episodes)])
+
+    return total_rewards, video_frames if not visualise else gif_frames
 
   def evaluate_mode(self):
     # Set models to eval mode
