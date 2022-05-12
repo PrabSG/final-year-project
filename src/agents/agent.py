@@ -13,8 +13,12 @@ class Agent(ABC):
   def choose_action(self):
     pass
 
-  def run_tests(self, n_episodes, env, args, print_logging=True):
+  def run_tests(self, n_episodes, env, args, print_logging=True, visualise=False):
     self.evaluate_mode()
+
+    total_rewards = []
+    if visualise:
+      frames = []
 
     for i_episode in range(n_episodes):
       print(f"Test Episode {i_episode+1}")
@@ -23,11 +27,15 @@ class Agent(ABC):
       timestep = 0
 
       trace = []
+      total_rewards.append(0)
 
       observation = env.get_observation()
       str_grid = str(env)
 
       while not env.is_complete() and timestep <= args.max_episode_length:
+        if visualise:
+          frames.append(np.moveaxis(env._env.render("rgb_array"), 2, 0))
+
         action = self.choose_action(observation)
         new_observation, reward, done, _ = env.step(action)
 
@@ -40,9 +48,12 @@ class Agent(ABC):
 
       if print_logging:
         for s, a, r, new_s in trace:
+          total_rewards[i_episode] += r
           print("State:\n", s, "\nAction:", a, "Reward:", r, "\nNew State:\n", new_s)
     
     self.train_mode()
+
+    return total_rewards, frames if visualise else []
 
   @abstractmethod
   def train_mode(self):

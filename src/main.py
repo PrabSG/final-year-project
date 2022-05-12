@@ -1,6 +1,7 @@
 import argparse
 import os
 
+from array2gif import write_gif
 import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -41,37 +42,15 @@ def initialise(args):
 
 def train_agent(env, agent, args):
   return agent.train(env, writer=args.writer)
-
+    
 def visualise_agent(env, agent, args):
   """Run agent in environment and visualise agent's path."""
-  if args.gif:
-    from array2gif import write_gif
-    frames = []
+  _, frames = agent.run_tests(args.vis_eps, env, args, visualise=True)
 
-  # TODO: Add render function to environment interface to work with non-minigrid envs.
-  env._env.render('human')
-
-  for _ in range(args.vis_eps):
-    obs = env.reset()
-
-    while True:
-      env._env.render('human')
-      if args.gif:
-        frames.append(np.moveaxis(env._env.render("rgb_array"), 2, 0))
-
-      action = agent.choose_action(obs)
-      obs, _, done, _ = env.step(action)
-      if done or env._env.window.closed:
-        break
-
-    if env._env.window.closed:
-        break
-
-  if args.gif:
-    print("Saving gif... ", end="")
-    write_gif(np.array(frames), args.gif+".gif", fps=1/0.1)
-    print("Done.")
-
+  print("Saving gif... ", end="")
+  write_gif(np.array(frames), args.gif+".gif", fps=1/0.1)
+  print("Done.")
+  
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(description="Agent and Environment options")
   # Environment arguments
@@ -109,4 +88,5 @@ if __name__ == "__main__":
   # n_episodes, episode_rs, n_steps, train_losses = train_agent(env, agent, args)
   # plot_training(n_episodes, episode_rs, n_steps, train_losses, args.plot)
   agent.run_tests(args.test_episodes, env, args, print_logging=True)
-  # visualise_agent(env, agent, args)
+  if args.gif != "":
+    visualise_agent(env, agent, args)
