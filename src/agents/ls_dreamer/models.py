@@ -422,7 +422,7 @@ class SampleDist:
     return getattr(self._dist, name)
 
   def mean(self):
-    sample = dist.rsample()
+    sample = self._dist.rsample()
     return torch.mean(sample, 0)
 
   def mode(self):

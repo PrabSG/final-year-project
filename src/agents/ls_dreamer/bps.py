@@ -33,8 +33,6 @@ class BoundedPrescienceShield(Shield):
         )
         for i in range(0, len(action) + 1):
             futures, violations = self.imagine_futures(belief, state, action, policy)
-            print("Num paths:", self.paths_to_sample)
-            print("Num 'violation' checks:", len(violations))
             if sum(violations) > self.violation_threshold:
                 # Try all the actions
                 action = torch.tensor(
