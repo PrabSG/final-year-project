@@ -22,6 +22,7 @@ from agents.ls_dreamer.memory import ExperienceReplay
 from agents.ls_dreamer.models import ActorModel, Encoder, ObservationModel, RewardModel, TransitionModel, ValueModel, ViolationModel, bottle
 from agents.ls_dreamer.planner import MPCPlanner
 from agents.ls_dreamer.utils import FreezeParameters, imagine_ahead, lambda_return, lineplot, write_video
+from utils import visualise_agent
 
 class LSDreamerParams():
   def __init__(self,
@@ -41,7 +42,7 @@ class LSDreamerParams():
                action_repeat=1,
                eps_max=0.4,
                eps_min=0.1,
-               eps_decay=200000,
+               eps_decay=2500,
                episodes=1000,
                seed_episodes=5,
                collect_interval=100,
@@ -54,9 +55,9 @@ class LSDreamerParams():
                global_kl_beta=0,
                free_nats=3,
                bit_depth=3,
-               model_learning_rate=6e-4,
-               actor_learning_rate=8e-5,
-               value_learning_rate=8e-5,
+               model_learning_rate=1e-3,
+               actor_learning_rate=8e-4,
+               value_learning_rate=8e-4,
                learning_rate_schedule=0,
                adam_epsilon=1e-7,
                grad_clip_norm=100.0,
@@ -76,6 +77,7 @@ class LSDreamerParams():
                render=False,
                paths_to_sample=40,
                violation_threshold=10,
+               vis_freq=None,
                device="cpu"):
     self.args = args
     self.results_dir = results_dir
@@ -128,6 +130,7 @@ class LSDreamerParams():
     self.render = render
     self.paths_to_sample = paths_to_sample
     self.violation_threshold = violation_threshold
+    self.vis_freq = vis_freq
     self.device = device
     
 
@@ -450,8 +453,6 @@ class LatentShieldedDreamer(Agent):
         writer.add_scalar("value_loss", self.metrics['value_loss'][-1], self.metrics['steps'][-1])  
       print("episodes: {}, total_steps: {}, train_reward: {}, violations: {} ".format(self.metrics['episodes'][-1], self.metrics['steps'][-1], self.metrics['train_rewards'][-1], self.metrics['violation_count'][-1][1]))
 
-      print("Current epsilon:", self._expl_eps)
-
       # Checkpoint models
       if episode % self.params.checkpoint_interval == 0:
         torch.save({'transition_model': self.transition_model.state_dict(),
@@ -468,7 +469,10 @@ class LatentShieldedDreamer(Agent):
                     }, os.path.join(self.params.results_dir, 'models_%d.pth' % episode))
         if self.params.checkpoint_experience:
           torch.save(self.D, os.path.join(self.params.results_dir, 'experience.pth'))  # Warning: will fail with MemoryError with large memory sizes
-    
+      
+      if self.params.vis_freq is not None and episode % self.params.vis_freq == 0:
+        visualise_agent(env, self, self.params.args, episode=episode)
+
     # Close training environment
     env.close()
 
