@@ -39,7 +39,9 @@ class LSDreamerParams():
                belief_size=200,
                state_size=30,
                action_repeat=1,
-               action_noise=0.4,
+               eps_max=0.4,
+               eps_min=0.1,
+               eps_decay=200000,
                episodes=1000,
                seed_episodes=5,
                collect_interval=100,
@@ -52,7 +54,7 @@ class LSDreamerParams():
                global_kl_beta=0,
                free_nats=3,
                bit_depth=3,
-               model_learning_rate=1e-3,
+               model_learning_rate=6e-4,
                actor_learning_rate=8e-5,
                value_learning_rate=8e-5,
                learning_rate_schedule=0,
@@ -89,7 +91,9 @@ class LSDreamerParams():
     self.belief_size = belief_size
     self.state_size = state_size
     self.action_repeat = action_repeat
-    self.action_noise = action_noise
+    self.eps_max = eps_max
+    self.eps_min = eps_min
+    self.eps_decay = eps_decay
     self.episodes = episodes
     self.seed_episodes = seed_episodes
     self.collect_interval = collect_interval
@@ -140,6 +144,10 @@ class LatentShieldedDreamer(Agent):
       'violation_loss': [], 'violation_count': []
     }
 
+    # Initialise epsilon for linear decay
+    self._expl_eps = self.params.eps_max
+    self._optimize_steps = 0
+
     self.D = ExperienceReplay(params.experience_size, params.symbolic_env, env.state_size, env.action_size, params.bit_depth, params.device)
 
     # Initialise Models
@@ -167,6 +175,7 @@ class LatentShieldedDreamer(Agent):
       self.encoder.load_state_dict(model_dicts['encoder'])
       self.actor_model.load_state_dict(model_dicts['actor_model'])
       self.value_model.load_state_dict(model_dicts['value_model'])
+      self._optimize_steps = model_dicts['optimize_steps']
     
     # Choose planning algorithm
     if params.algo == "dreamer":
@@ -204,15 +213,20 @@ class LatentShieldedDreamer(Agent):
     else:
       action = self.planner(belief, posterior_state)  # Get action from planner(q(s_t|o≤t,a<t), p)
     if explore:
-      action = torch.clamp(Normal(action.float(), self.params.action_noise).rsample(), -1, 1).to(self.params.device) # Add gaussian exploration noise on top of the sampled action
-      # action = action + self.params.action_noise * torch.randn_like(action)  # Add exploration noise ε ~ p(ε) to the action
+      # Exploration is epsilon-greedy for discrete control envs
+      curr_eps = self._expl_eps
+      self._expl_eps = self.params.eps_max - (((self.params.eps_max - self.params.eps_min) / self.params.eps_decay) * self._optimize_steps)
+      self._expl_eps = max(self._expl_eps, self.params.eps_min)
+
+      if np.random.uniform(0, 1) <= curr_eps:
+        action = env.sample_random_action().to(self.params.device).unsqueeze(0)
+      # action = torch.clamp(Normal(action.float(), self.params.eps_max).rsample(), -1, 1).to(self.params.device) # Add gaussian exploration noise on top of the sampled action
+
     shield_interfered = False
-    # if episode > 60 or (episode > 10 and episode < 40 and episode % 2 == 0) or (episode >= 40 and episode % 2 == 0 and episode % 3 == 0):
     shield_action, shield_interfered = shield.step(belief, posterior_state, action, self.observation_model, self.planner, observation, self.encoder)
-    if episode > 60 or (episode > 40 and episode % 2 == 0):
+    if shield_interfered:
       action = shield_action.to(device=self.params.device)
-      if shield_interfered:
-        print('interfered')
+      print('interfered')
     next_observation, reward, done, info = env.step(action.cpu() if isinstance(env, EnvBatcher) else action[0].cpu()) # action[0].cpu())  # Perform environment step (action repeats handled internally)
     violation = info['violation']
     if shield_interfered or (torch.any(violation) if torch.is_tensor(violation) else violation):
@@ -393,6 +407,7 @@ class LatentShieldedDreamer(Agent):
         self.violation_model.modules)
 
       self._optimize_models(losses, model_modules)
+      self._optimize_steps += 1
 
       self._update_plot_losses(losses)
       
@@ -434,6 +449,8 @@ class LatentShieldedDreamer(Agent):
         writer.add_scalar("value_loss", self.metrics['value_loss'][-1], self.metrics['steps'][-1])  
       print("episodes: {}, total_steps: {}, train_reward: {}, violations: {} ".format(self.metrics['episodes'][-1], self.metrics['steps'][-1], self.metrics['train_rewards'][-1], self.metrics['violation_count'][-1][1]))
 
+      print("Current epsilon:", self._expl_eps)
+
       # Checkpoint models
       if episode % self.params.checkpoint_interval == 0:
         torch.save({'transition_model': self.transition_model.state_dict(),
@@ -445,7 +462,8 @@ class LatentShieldedDreamer(Agent):
                     'value_model': self.value_model.state_dict(),
                     'model_optimizer': self.model_optimizer.state_dict(),
                     'actor_optimizer': self.actor_optimizer.state_dict(),
-                    'value_optimizer': self.value_optimizer.state_dict()
+                    'value_optimizer': self.value_optimizer.state_dict(),
+                    'optimize_steps': self._optimize_steps
                     }, os.path.join(self.params.results_dir, 'models_%d.pth' % episode))
         if self.params.checkpoint_experience:
           torch.save(self.D, os.path.join(self.params.results_dir, 'experience.pth'))  # Warning: will fail with MemoryError with large memory sizes
