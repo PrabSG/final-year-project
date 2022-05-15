@@ -253,18 +253,18 @@ class DDQNAgent(Agent):
     self._optimizer.step()
     return loss.item()
 
-  def train(self, env: Environment, print_logging=True):
+  def train(self, env: Environment, print_logging=True, writer=None):
     if print_logging:
       print("Training DDQN agent...")
 
-    self._policy_net.train()
-
-    if self.multi_dim_input:
-      self._policy_net_encoder.train()
+    self.train_mode()
 
     optimize_steps = 0
-    episode_rewards = []
-    train_losses = []
+    metrics = {
+      "episode_rewards": [],
+      "train_losses": [],
+      "steps": []
+    }
 
     for i_episode in range(self.params.episodes):
       if print_logging and (i_episode+1) % 5 == 0:
@@ -273,6 +273,8 @@ class DDQNAgent(Agent):
 
       total_reward = 0
       state = env.get_observation().unsqueeze(0).to(self.params.device)
+
+      metrics["train_losses"].append(0)
 
       for t in range(self.params.max_episode_len):
         eps = self.params.eps_func(i_episode)
@@ -287,8 +289,7 @@ class DDQNAgent(Agent):
 
         loss = self._optimize_model()
         if loss is not None:
-          train_losses.append(loss)
-
+          metrics["train_losses"][-1] += loss
 
           optimize_steps += 1
           if optimize_steps % self.params.update_steps == 0:
@@ -298,14 +299,25 @@ class DDQNAgent(Agent):
           break
         state = next_state        
 
-      episode_rewards.append(total_reward)
+      metrics["steps"].append(t+1 + (0 if len(metrics["steps"]) == 0 else metrics["steps"][-1]))
+      metrics["episode_rewards"].append(total_reward)
+      
       if print_logging and (i_episode+1) % 5 == 0:
         print(f"Episode reward: {total_reward}")
+
+      if writer is not None:
+        writer.add_scalar("train_reward", self.metrics["episode_rewards"][-1], self.metrics["steps"][-1])
+        writer.add_scalar("q_loss", self.metrics["train_losses"][-1], self.metrics["steps"][-1])
     
     env.close()
-    return self.params.episodes, episode_rewards, optimize_steps, train_losses
+    return self.params.episodes, metrics["episode_rewards"], optimize_steps, metrics["train_losses"]
 
-  def evaluate(self):
+  def train_mode(self):
+    self._policy_net.train()
+    if self.multi_dim_input:
+      self._policy_net_encoder.train()
+
+  def evaluate_mode(self):
     self._policy_net.eval()
     if self.multi_dim_input:
       self._policy_net_encoder.eval()
