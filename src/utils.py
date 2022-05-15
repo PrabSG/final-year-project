@@ -31,6 +31,7 @@ def visualise_agent(env, agent, args, episode=None):
   _, frames = agent.run_tests(args.vis_eps, env, args, visualise=True, episode=episode)
 
   if episode is None:
+<<<<<<< HEAD
     filename = "vis_final.gif"
   else:
     filename = f"vis_ep_{episode}.gif"
@@ -38,3 +39,12 @@ def visualise_agent(env, agent, args, episode=None):
   print("Saving gif... ", end="")
   write_gif(np.array(frames), args.results_dir + filename, fps=1/0.1)
   print("Done.")
+=======
+    filename = "/vis_final.gif"
+  else:
+    filename = f"/vis_ep_{episode}.gif"
+
+  print("Saving gif... ", end="")
+  write_gif(np.array(frames), args.results_dir + filename, fps=1/0.1)
+  print("Done.")
+>>>>>>> e5c86927e823bbcc648956e05e8dfa0ce3457845
