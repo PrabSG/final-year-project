@@ -1,5 +1,6 @@
 import math
 
+from array2gif import write_gif
 import matplotlib.pyplot as plt
 
 class DimensionError(IndexError):
@@ -23,3 +24,16 @@ def plot_training(n_episodes, episode_rs, n_steps, train_losses, filename):
 
   plt.show()
   plt.savefig(filename)
+
+def visualise_agent(env, agent, args, episode=None):
+  """Run agent in environment and visualise agent's path."""
+  _, frames = agent.run_tests(args.vis_eps, env, args, visualise=True, episode=episode)
+
+  if episode is None:
+    filename = "/vis_final.gif"
+  else:
+    filename = f"/vis_ep_{episode}.gif"
+
+  print("Saving gif... ", end="")
+  write_gif(np.array(frames), args.results_dir + filename, fps=1/0.1)
+  print("Done.")
