@@ -27,6 +27,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
     seed=None,
     agent_view_size=7,
     random_crossing=True,
+    no_safe_obstacle=False,
     **kwargs
   ):
     self.num_crossings = num_crossings
@@ -41,6 +42,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
 
     self.safe_gap_types = [obj_type for obj_type in self.gap_objs.keys() if not (obj_type in self.obstacle_types)]
     self.random_crossing = random_crossing
+    self.no_safe_obstacle = no_safe_obstacle
     super().__init__(grid_size=grid_size, width=width, height=height, seed=seed, agent_view_size=agent_view_size, **kwargs)
     self.actions = UnsafeCrossingEnv.Actions
 
@@ -78,9 +80,11 @@ class UnsafeCrossingEnv(MiniGridEnv):
         if not (j in gaps):
           self.put_obj(Wall(), i, j)
         
-      safe_gap_idx = int(self._rand_bool())
+      # safe_gap_idx = int(self._rand_bool())
+      safe_gap_idx = 0
 
-      self.put_obj(self.gap_objs[self._rand_elem(self.safe_gap_types)], i, gaps[abs(0 - safe_gap_idx)])
+      if not self.no_safe_obstacle:
+        self.put_obj(self.gap_objs[self._rand_elem(self.safe_gap_types)], i, gaps[abs(0 - safe_gap_idx)])
       self.put_obj(self.obstacle_objs[self.obstacle_type], i, gaps[abs(1 - safe_gap_idx)])
 
     self.mission = (
@@ -91,12 +95,16 @@ class UnsafeCrossingEnv(MiniGridEnv):
     """Override default reward function to penalise on each non-successful step."""
     if done:
       if violation:
-        return -1
+        return -50 / self.max_steps
         # return - (0.5 * self.steps_remaining) / self.max_steps
       else:
         return 100
     else:
-      return -1
+      return -50 / self.max_steps
+
+class UnsafeCrossingSimpleEnv(UnsafeCrossingEnv):
+  def __init__(self, **kwargs):
+    super().__init__(num_crossings=1, obstacle_types=["lava"], grid_size=5, random_crossing=False, agent_view_size=5, no_safe_obstacle=True, **kwargs)
 
 class UnsafeCrossingMicroEnv(UnsafeCrossingEnv):
   def __init__(self, **kwargs):
@@ -109,6 +117,12 @@ class UnsafeCrossingSmallEnv(UnsafeCrossingEnv):
 class UnsafeCrossingMedEnv(UnsafeCrossingEnv):
   def __init__(self, **kwargs):
     super().__init__(num_crossings=2, obstacle_types=["lava", "glass"], grid_size=9, **kwargs)
+
+register(
+  id="MiniGrid-UnsafeCrossingSimple-v0",
+  entry_point="gym_minigrid.envs:UnsafeCrossingSimpleEnv",
+  kwargs={"max_steps": DEF_MAX_EPISODE_LENGTH}
+)
 
 register(
   id="MiniGrid-UnsafeCrossingMicro-v0",

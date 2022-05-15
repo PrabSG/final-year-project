@@ -2,6 +2,7 @@ import math
 
 from array2gif import write_gif
 import matplotlib.pyplot as plt
+import numpy as np
 
 class DimensionError(IndexError):
   def __init__(self, expected, given, *args: object) -> None:

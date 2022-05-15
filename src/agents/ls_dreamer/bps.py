@@ -72,7 +72,6 @@ class BoundedPrescienceShield(Shield):
                     next_belief.view(-1, H), next_state.view(-1, Z)
                 ).squeeze()
             ).item()
-            violations.append(violation)
             traj = [(next_belief, next_state)]
             for step in range(self.depth - 1):
                 action = policy.get_action(

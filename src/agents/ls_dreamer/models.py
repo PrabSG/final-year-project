@@ -354,11 +354,11 @@ class VisualEncoderSmall(jit.ScriptModule):
     super().__init__()
     self.act_fn = getattr(F, activation_function)
     self.embedding_size = embedding_size
-    self.conv1 = nn.Conv2d(3, 32, 3, stride=1, padding='same')
-    self.conv2 = nn.Conv2d(32, 64, 3, stride=1, padding='same')
-    self.conv3 = nn.Conv2d(64, 128, 3, stride=1)
-    self.conv4 = nn.Conv2d(128, 256, 3, stride=1)
-    self.fc = nn.Identity() if embedding_size == 256 else nn.Linear(256, embedding_size)
+    self.conv1 = nn.Conv2d(3, 16, kernel_size=3, padding='same')
+    self.conv2 = nn.Conv2d(16, 32, 3, stride=1, padding='same')
+    self.conv3 = nn.Conv2d(32, 64, 3, stride=1, padding='same')
+    self.conv4 = nn.Conv2d(64, 128, 5, stride=1)
+    self.fc = nn.Identity() if embedding_size == 128 else nn.Linear(128, embedding_size)
     self.modules = [self.conv1, self.conv2, self.conv3, self.conv4]
 
   @jit.script_method
@@ -367,8 +367,8 @@ class VisualEncoderSmall(jit.ScriptModule):
     hidden = self.act_fn(self.conv2(hidden))
     hidden = self.act_fn(self.conv3(hidden))
     hidden = self.act_fn(self.conv4(hidden))
-    hidden = hidden.view(-1, 256)
-    hidden = self.fc(hidden)  # Identity if embedding size is 256 else linear projection
+    hidden = hidden.view(-1, 128)
+    hidden = self.fc(hidden)  # Identity if embedding size is 128 else linear projection
     return hidden
 
 def Encoder(symbolic, observation_size, embedding_size, activation_function='relu'):
@@ -422,7 +422,7 @@ class SampleDist:
     return getattr(self._dist, name)
 
   def mean(self):
-    sample = dist.rsample()
+    sample = self._dist.rsample()
     return torch.mean(sample, 0)
 
   def mode(self):

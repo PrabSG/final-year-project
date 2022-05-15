@@ -8,6 +8,8 @@ import gym
 def init_env(args):
   if args.env == "basic":
     return BasicEnv()
+  elif args.env == "unsafe-simple":
+    return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingSimple-v0", max_steps=args.max_episode_length)
   elif args.env == "unsafe-micro":
     return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingMicro-v0", max_steps=args.max_episode_length)
   elif args.env == "unsafe-small":
