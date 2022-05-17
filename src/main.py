@@ -30,7 +30,10 @@ def init_agent(agent_type, env, args):
     params = DDQNParams(args.train_episodes, args.max_episode_length, *ddqn_params, encoding_size=32, cnn_channels=[8, 16, 16], cnn_kernels=[3, 3, 5], device=device)
     return DDQNAgent(env.state_size, env.action_size, params)
   elif agent_type == "ls-dreamer":
-    params = LSDreamerParams(args, args.results_dir, episodes=args.train_episodes, test=True, test_interval=25, test_episodes=5, max_episode_length=args.max_episode_length, embedding_size=128, vis_freq=args.vis_freq, device=device)
+    params = LSDreamerParams(
+      args, args.results_dir, episodes=args.train_episodes, test=True, test_interval=25,
+      test_episodes=5, max_episode_length=args.max_episode_length, embedding_size=128,
+      vis_freq=args.vis_freq, seed_episodes=15, planning_horizon=5, belief_size=100, state_size=20, device=device)
     return LatentShieldedDreamer(params, env)
   else:
     raise ValueError(f"Agent Type '{agent_type}' not defined.")

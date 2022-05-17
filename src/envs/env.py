@@ -149,7 +149,6 @@ class MiniGridEnvWrapper(Environment):
     return (img_shape[2], *img_shape[:2])
 
 
-
 class BasicEnv(Environment):
   """2-D grid environment with single goal state.
 

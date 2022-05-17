@@ -354,7 +354,7 @@ class VisualEncoderSmall(jit.ScriptModule):
     super().__init__()
     self.act_fn = getattr(F, activation_function)
     self.embedding_size = embedding_size
-    self.conv1 = nn.Conv2d(3, 16, kernel_size=3, padding='same')
+    self.conv1 = nn.Conv2d(3, 16, 3, padding='same')
     self.conv2 = nn.Conv2d(16, 32, 3, stride=1, padding='same')
     self.conv3 = nn.Conv2d(32, 64, 3, stride=1, padding='same')
     self.conv4 = nn.Conv2d(64, 128, 5, stride=1)
