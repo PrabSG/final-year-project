@@ -9,7 +9,7 @@ from agents.ls_dreamer.env import postprocess_observation, preprocess_observatio
 
 
 class ExperienceReplay():
-  def __init__(self, size, symbolic_env, observation_size, action_size, bit_depth, device):
+  def __init__(self, size, symbolic_env, observation_size, action_size, bit_depth, device, process_observations=False):
     self.device = device
     self.symbolic_env = symbolic_env
     self.size = size
@@ -24,15 +24,16 @@ class ExperienceReplay():
     self.full = False  # Tracks if memory has been filled/all slots are valid
     self.steps, self.episodes = 0, 0  # Tracks how much experience has been used in total
     self.bit_depth = bit_depth
+    self.process_observations = process_observations
     self.violation_count = 0
 
   def append(self, observation, action, reward, violation, done):
-    if self.symbolic_env:
-      self.observations[self.idx] = observation.numpy()
-    else:
+    if self.process_observations:
       self.observations[self.idx] = postprocess_observation(
         observation.numpy(), self.bit_depth
       )  # Decentre and discretise visual observations (to save memory)
+    else:
+      self.observations[self.idx] = observation.numpy()
     self.actions[self.idx] = action.numpy()
     self.rewards[self.idx] = reward
     self.violations[self.idx] = violation
@@ -54,7 +55,7 @@ class ExperienceReplay():
   def _retrieve_batch(self, idxs, n, L):
     vec_idxs = idxs.transpose().reshape(-1)  # Unroll indices
     observations = torch.as_tensor(self.observations[vec_idxs].astype(np.float32))
-    if not self.symbolic_env:
+    if self.process_observations:
       preprocess_observation_(observations, self.bit_depth)  # Undo discretisation for visual observations
     return (
       observations.reshape(L, n, *observations.shape[1:]),
