@@ -64,7 +64,7 @@ class VisualEncoderSmall(nn.Module):
     hidden = self.fc(hidden)  # Identity if embedding size is 128 else linear projection
     return hidden
 
-def Encoder(observation_size: Tuple[int], embedding_size: int, activation_function='relu'):
+def EncoderModel(observation_size: Tuple[int], embedding_size: int, activation_function='relu'):
   if observation_size == (3, 64, 64):
     return VisualEncoder(embedding_size, activation_function)
   elif len(observation_size) == 3:
