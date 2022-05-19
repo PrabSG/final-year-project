@@ -40,9 +40,9 @@ class LSDreamerParams():
                belief_size=200,
                state_size=30,
                action_repeat=1,
-               eps_max=0.5,
+               eps_max=0.4,
                eps_min=0.1,
-               eps_decay=2500,
+               eps_decay=200000,
                episodes=1000,
                seed_episodes=5,
                collect_interval=100,
@@ -53,9 +53,11 @@ class LSDreamerParams():
                overshooting_kl_beta=0,
                overshooting_reward_scale=0,
                global_kl_beta=0,
+               kl_balancing_alpha=0.8,
+               kl_scaling_beta=0.2,
                free_nats=3,
                bit_depth=3,
-               model_learning_rate=1e-3,
+               model_learning_rate=6e-4,
                actor_learning_rate=8e-5,
                value_learning_rate=8e-5,
                learning_rate_schedule=0,
@@ -106,6 +108,8 @@ class LSDreamerParams():
     self.overshooting_kl_beta = overshooting_kl_beta
     self.overshooting_reward_scale = overshooting_reward_scale
     self.global_kl_beta = global_kl_beta
+    self.kl_balancing_alpha = kl_balancing_alpha
+    self.kl_scaling_beta = kl_scaling_beta
     self.free_nats = free_nats
     self.bit_depth = bit_depth
     self.model_learning_rate = model_learning_rate
@@ -135,7 +139,7 @@ class LSDreamerParams():
     
 
 class LatentShieldedDreamer(Agent):
-  VIOLATION_REWARD_SCALING = 50
+  VIOLATION_REWARD_SCALING = 0.5
 
   def __init__(self, params: LSDreamerParams, env):
     super().__init__()
@@ -226,8 +230,8 @@ class LatentShieldedDreamer(Agent):
       # action = torch.clamp(Normal(action.float(), self.params.eps_max).rsample(), -1, 1).to(self.params.device) # Add gaussian exploration noise on top of the sampled action
 
     shield_interfered = False
-    shield_action, shield_interfered = shield.step(belief, posterior_state, action, self.observation_model, self.planner, observation, self.encoder)
     if episode > 60 or (episode > 40 and episode % 2 == 0):
+      shield_action, shield_interfered = shield.step(belief, posterior_state, action, self.observation_model, self.planner, observation, self.encoder)
       action = shield_action.to(device=self.params.device)
       if shield_interfered:
         print('interfered')
@@ -261,18 +265,20 @@ class LatentShieldedDreamer(Agent):
       else:
         reward_loss = F.mse_loss(bottle(self.reward_model, (beliefs, posterior_states)), rewards[:-1], reduction='none').mean(dim=(0,1))
         # if episode > 50:
-        violation_loss = F.cross_entropy(
-          bottle(self.violation_model, (beliefs, posterior_states, )).reshape(len(violations[:-1]) * len(violations), 2), 
-          violations[:-1].reshape(len(violations[:-1]) * len(violations)),
-          weight=torch.tensor([1.,3.]).to(self.params.device),
-          reduction='none'
-          ).mean()
+      violation_loss = F.cross_entropy(
+        bottle(self.violation_model, (beliefs, posterior_states, )).reshape(len(violations[:-1]) * len(violations), 2), 
+        violations[:-1].reshape(len(violations[:-1]) * len(violations)),
+        weight=torch.tensor([1.,3.]).to(self.params.device),
+        reduction='none'
+        ).mean()
         # else:
           # violation_loss = torch.zeros([1]).to(self.params.device) # TODO(@PrabSG): Check why violation loss 0 before 50 episodes
       # transition loss
-      kl_loss = 0.8 * kl_divergence(Normal(posterior_means.detach(), posterior_std_devs.detach()), Normal(prior_means, prior_std_devs)).sum(dim=2)
-      kl_loss += 0.2 * kl_divergence(Normal(posterior_means, posterior_std_devs), Normal(prior_means.detach(), prior_std_devs.detach())).sum(dim=2)
+      kl_loss = self.params.kl_balancing_alpha * kl_divergence(Normal(posterior_means.detach(), posterior_std_devs.detach()), Normal(prior_means, prior_std_devs)).sum(dim=2)
+      kl_loss += (1 - self.params.kl_balancing_alpha) * kl_divergence(Normal(posterior_means, posterior_std_devs), Normal(prior_means.detach(), prior_std_devs.detach())).sum(dim=2)
       kl_loss = kl_loss.mean(dim=(0,1))
+      if self.params.free_nats is not None:
+        kl_loss = torch.max(kl_loss - self.params.free_nats, torch.zeros_like(kl_loss))
       # kl_loss = torch.max(div, free_nats).mean(dim=(0, 1))  # Note that normalisation by overshooting distance and weighting by overshooting distance cancel out
       if self.params.global_kl_beta != 0:
         kl_loss += self.params.global_kl_beta * kl_divergence(Normal(posterior_means, posterior_std_devs), self.global_prior).sum(dim=2).mean(dim=(0, 1))
@@ -298,7 +304,7 @@ class LatentShieldedDreamer(Agent):
       if self.params.learning_rate_schedule != 0:
         for group in self.model_optimizer.param_groups:
           group['lr'] = min(group['lr'] + self.params.model_learning_rate / self.params.model_learning_rate_schedule, self.params.model_learning_rate)
-      model_loss = observation_loss + reward_loss + kl_loss + violation_loss 
+      model_loss = observation_loss + reward_loss + (self.params.kl_scaling_beta * kl_loss) + violation_loss 
       # Update model parameters
       self.model_optimizer.zero_grad()
       model_loss.backward()
