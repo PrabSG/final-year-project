@@ -6,6 +6,7 @@ Imagination-Based Agents' by Peter He."""
 import itertools
 import os
 
+from array2gif import write_gif
 import numpy as np
 import torch
 from torch import nn, optim
@@ -206,13 +207,13 @@ class LatentShieldedDreamer(Agent):
     belief, _, _, _, posterior_state, _, _ = self.transition_model(posterior_state, action.unsqueeze(dim=0), belief, self.encoder(observation).unsqueeze(dim=0))  # Action and observation need extra time dimension
     imagd_violation = torch.argmax(bottle(self.violation_model, (belief, posterior_state)).squeeze())
 
-    if not torch.is_tensor(violation):
-      if violation == 1 and imagd_violation > 0.8:
-        print('correctly pred violation')
-      elif violation == 1 and imagd_violation < 0.8:
-        print('missed violation')
-      elif violation == 0 and imagd_violation > 0.8:
-        print('incorrectly pred violation')
+    # if not torch.is_tensor(violation):
+    #   if violation == 1 and imagd_violation > 0.8:
+    #     print('correctly pred violation')
+    #   elif violation == 1 and imagd_violation < 0.8:
+    #     print('missed violation')
+    #   elif violation == 0 and imagd_violation > 0.8:
+    #     print('incorrectly pred violation')
 
     belief, posterior_state = belief.squeeze(dim=0), posterior_state.squeeze(dim=0)  # Remove time dimension from belief/state
     if self.params.algo=="dreamer":
@@ -229,15 +230,16 @@ class LatentShieldedDreamer(Agent):
         action = env.sample_random_action().to(self.params.device).unsqueeze(0)
       # action = torch.clamp(Normal(action.float(), self.params.eps_max).rsample(), -1, 1).to(self.params.device) # Add gaussian exploration noise on top of the sampled action
 
-    shield_interfered = False
-    if episode > 60 or (episode > 40 and episode % 2 == 0):
-      shield_action, shield_interfered = shield.step(belief, posterior_state, action, self.observation_model, self.planner, observation, self.encoder)
-      action = shield_action.to(device=self.params.device)
-      if shield_interfered:
-        print('interfered')
+    # shield_interfered = False
+    # shield_action, shield_interfered = shield.step(belief, posterior_state, action, self.observation_model, self.planner, observation, self.encoder)
+    # if episode > 60 or (episode > 40 and episode % 2 == 0):
+    #   action = shield_action.to(device=self.params.device)
+    #   if shield_interfered:
+    #     print('interfered')
     next_observation, reward, done, info = env.step(action.cpu() if isinstance(env, EnvBatcher) else action[0].cpu()) # action[0].cpu())  # Perform environment step (action repeats handled internally)
     violation = info['violation']
-    if shield_interfered or (torch.any(violation) if torch.is_tensor(violation) else violation):
+    # if shield_interfered or (torch.any(violation) if torch.is_tensor(violation) else violation):
+    if (torch.any(violation) if torch.is_tensor(violation) else violation):
       reward -= self.VIOLATION_REWARD_SCALING * violation
       
     return belief, posterior_state, action, next_observation, reward, violation, done
@@ -313,10 +315,18 @@ class LatentShieldedDreamer(Agent):
 
       #Dreamer implementation: actor loss calculation and optimization    
       with torch.no_grad():
+        vis_observation = observations.detach().cpu().numpy()[1:][0, 0]
         actor_states = posterior_states.detach()
         actor_beliefs = beliefs.detach()
       with FreezeParameters(model_modules):
-        imagination_traj = imagine_ahead(actor_states, actor_beliefs, self.actor_model, self.transition_model, self.params.planning_horizon)
+        imagination_traj, a0s = imagine_ahead(actor_states, actor_beliefs, self.actor_model, self.transition_model, self.params.planning_horizon)
+        init_vis_belief = actor_beliefs[0, 0]
+        init_vis_state = actor_states[0, 0]
+        vis_beliefs = imagination_traj[0][:, 0]
+        vis_states = imagination_traj[1][:, 0]
+        init_imag_obs = self.observation_model(init_vis_belief.unsqueeze(0), init_vis_state.unsqueeze(0)).detach().cpu().squeeze(0)
+        imag_obs = self.observation_model(vis_beliefs, vis_states).detach().cpu()
+        pred_obs = [vis_observation, self._process_pred_observation(init_imag_obs)] + [self._process_pred_observation(obs) for obs in imag_obs]
       imged_beliefs, imged_prior_states, imged_prior_means, imged_prior_std_devs = imagination_traj
       with FreezeParameters(model_modules + self.value_model.modules):
         imged_reward = bottle(self.reward_model, (imged_beliefs, imged_prior_states))
@@ -344,6 +354,8 @@ class LatentShieldedDreamer(Agent):
       
       # Store (0) observation loss (1) reward loss (2) KL loss (3) actor loss (4) value loss (5) violation loss
       losses.append([observation_loss.item(), reward_loss.item(), kl_loss.item(), actor_loss.item(), value_loss.item(), violation_loss.item()])
+
+      return pred_obs, a0s
 
   def _update_plot_losses(self, losses):
     losses = tuple(zip(*losses))
@@ -416,7 +428,9 @@ class LatentShieldedDreamer(Agent):
         self.reward_model.modules +
         self.violation_model.modules)
 
-      self._optimize_models(losses, model_modules)
+      pred_obs, a0s = self._optimize_models(losses, model_modules)
+      # TODO: REMOVE THIS VISUALISATION CODE^^
+
       self._optimize_steps += 1
 
       self._update_plot_losses(losses)
@@ -477,6 +491,32 @@ class LatentShieldedDreamer(Agent):
           torch.save(self.D, os.path.join(self.params.results_dir, 'experience.pth'))  # Warning: will fail with MemoryError with large memory sizes
       
       if self.params.vis_freq is not None and episode % self.params.vis_freq == 0:
+        # TODO: REMOVE THIS IMAGINE VISUALISATIONS
+        print(f"Episode {episode} - imagined actions")
+        action_str = ""
+        for a in a0s:
+          # print("Action taken:", env._one_hot_to_action_enum(a.cpu()))
+          action_str += str(torch.argmax(a.cpu()).item())
+        pred_frames = []
+        for obs in pred_obs:
+          obs_t = np.round(obs.transpose(1, 2, 0))
+          pred_frames.append(np.moveaxis(env._env.get_obs_render(obs_t), 2, 0))
+        imag_dir = self.params.args.results_dir + f"/imagine_preds"
+        os.makedirs(imag_dir, exist_ok=True)
+        pred_fname = f"/imagine_ep{episode}_pred_action_{action_str}.gif"
+        write_gif(pred_frames, imag_dir + pred_fname, fps=1/0.25)
+
+        obs, preds = self._visualise_observation_prediction(env, episode=episode)
+
+        save_dir = self.params.args.results_dir + f"/ep{episode}_frame_preds"
+        os.makedirs(save_dir, exist_ok=True)
+
+        for i in range(len(obs)):
+          ob_fname = f"/frame_ep{episode}_f{i}_seen.gif"
+          pred_fname = f"/frame_ep{episode}_f{i}_pred.gif"
+          write_gif(obs[i], save_dir + ob_fname)
+          write_gif(preds[i], save_dir + pred_fname)
+
         visualise_agent(env, self, self.params.args, episode=episode)
 
     # Close training environment
@@ -485,6 +525,49 @@ class LatentShieldedDreamer(Agent):
   def choose_action(self):
     # TODO(@PrabSG): Deprecate this function and find better way to yield states for visualisations
     return super().choose_action()
+
+  def _process_pred_observation(self, pred_obs):
+    pred_obs = pred_obs.numpy()
+    
+    pred_obs = pred_obs.round()
+    # pred_obs[0] = np.clip(pred_obs[0], 0, 12) # Object IDs
+    # pred_obs[1] = np.clip(pred_obs[1], 0, 5) # Color IDs
+    # pred_obs[2] = np.clip(pred_obs[2], 0, 2) # State IDs
+    return pred_obs
+
+  def _visualise_observation_prediction(self, env, episode=None):
+    if episode is None:
+      epsiode = self.params.episodes
+    
+    obs_frames = []
+    pred_frames = []
+
+    self.evaluate_mode()
+
+    with torch.no_grad():
+      observation, total_reward = env.reset(), 0
+      belief, posterior_state, action = torch.zeros(1, self.params.belief_size, device=self.params.device), torch.zeros(1, self.params.state_size, device=self.params.device), torch.zeros(1, env.action_size, device=self.params.device)
+      violation = torch.zeros(1, 1, device=self.params.device)
+      done = False
+      pbar = tqdm(range(self.params.max_episode_length // self.params.action_repeat))
+
+      for t in pbar:
+        obs_frames.append(np.moveaxis(env._env.get_obs_render(observation.cpu().numpy().transpose(1, 2, 0)), 2, 0))
+
+        belief, posterior_state, action, next_observation, reward, violation, done = self._update_belief_and_act(env, belief, posterior_state, action, observation.to(device=self.params.device), violation, None, episode)
+        total_reward += reward
+        pred_obs = self.observation_model(belief, posterior_state).cpu()
+        pred_obs = np.round(pred_obs.squeeze().numpy())
+        pred_frames.append(np.moveaxis(env._env.get_obs_render(pred_obs.transpose(1, 2, 0)), 2, 0))
+        observation = next_observation
+        if done:
+          pbar.close()
+          break
+      
+    self.train_mode()
+
+    return obs_frames, pred_frames
+
 
   def run_tests(self, n_episodes, env, args, print_logging=False, visualise=False, episode=None):
     # If running tests at no particular episode, run 'after' all training episodes
