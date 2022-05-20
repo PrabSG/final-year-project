@@ -1,3 +1,4 @@
+from gym_minigrid import minigrid
 from gym_minigrid.minigrid import *
 from gym_minigrid.register import register
 
@@ -101,6 +102,34 @@ class UnsafeCrossingEnv(MiniGridEnv):
         return 100
     else:
       return -50 / self.max_steps
+
+  def gen_obs(self):
+    obs = super().gen_obs()
+    one_hot_image = self._to_one_hot_obs(obs["image"])
+    obs["one_hot": one_hot_image]
+    return obs
+
+  def _to_one_hot_obs(self, obs):
+    """
+    Take an observation in minigrid format of (H x W x 3) for the 3 WorldObj fields, and convert
+    into a one-hot encoding for a reduced set of objects with size (H x W x N) where N is the
+    number of distinct objects in the environment.
+    """
+
+    obs_shape = obs.shape
+    one_hot_obs = np.zeros((obs_shape[0], obs_shape[1], len(minigrid.IDX_TO_OBJECT)))
+
+    for i in range(obs_shape[0]):
+      for j in range(obs_shape[1]):
+        one_hot_obs[i, j] = self._obj_encoding_to_one_hot(obs[i, j])
+
+    return one_hot_obs
+
+  def _obj_encoding_to_one_hot(self, encoded_obj):
+    obj_idx = minigrid.IDX_TO_OBJECT[encoded_obj[0]]
+    one_hot_obj = np.zeros((len(minigrid.IDX_TO_OBJECT)))
+    one_hot_obj[obj_idx] = 1
+    return one_hot_obj
 
 class UnsafeCrossingSimpleEnv(UnsafeCrossingEnv):
   def __init__(self, **kwargs):
