@@ -103,10 +103,12 @@ class MiniGridEnvWrapper(Environment):
     
     Optionally pass in raw environment observation to convert to correct format.
     """
+
     if obs is None:
-      obs = self._env.gen_obs()["image"].transpose(2, 0, 1)
-    else:
-      obs = obs["image"].transpose(2, 0, 1)
+      obs = self._env.gen_obs()
+
+    obs_type = "one_hot" if "one_hot" in obs else "image"
+    obs = obs[obs_type].transpose(2, 0, 1)
     return torch.tensor(obs, dtype=torch.float) if self.use_tensors else obs
   
   def step(self, action):
