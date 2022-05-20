@@ -80,8 +80,8 @@ class UnsafeCrossingEnv(MiniGridEnv):
         if not (j in gaps):
           self.put_obj(Wall(), i, j)
         
-      # safe_gap_idx = int(self._rand_bool())
-      safe_gap_idx = 0
+      safe_gap_idx = int(self._rand_bool())
+      # safe_gap_idx = 0
 
       if not self.no_safe_obstacle:
         self.put_obj(self.gap_objs[self._rand_elem(self.safe_gap_types)], i, gaps[abs(0 - safe_gap_idx)])
