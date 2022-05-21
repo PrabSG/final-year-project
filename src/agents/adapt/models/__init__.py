@@ -1,2 +1,2 @@
 from models.encoder import *
-from models.models import *
+from models.model import *
