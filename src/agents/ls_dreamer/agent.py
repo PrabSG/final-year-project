@@ -229,15 +229,16 @@ class LatentShieldedDreamer(Agent):
         action = env.sample_random_action().to(self.params.device).unsqueeze(0)
       # action = torch.clamp(Normal(action.float(), self.params.eps_max).rsample(), -1, 1).to(self.params.device) # Add gaussian exploration noise on top of the sampled action
 
-    shield_interfered = False
-    if episode > 60 or (episode > 40 and episode % 2 == 0):
-      shield_action, shield_interfered = shield.step(belief, posterior_state, action, self.observation_model, self.planner, observation, self.encoder)
-      action = shield_action.to(device=self.params.device)
-      if shield_interfered:
-        print('interfered')
+    # shield_interfered = False
+    # if episode > 60 or (episode > 40 and episode % 2 == 0):
+    #   shield_action, shield_interfered = shield.step(belief, posterior_state, action, self.observation_model, self.planner, observation, self.encoder)
+    #   action = shield_action.to(device=self.params.device)
+    #   if shield_interfered:
+    #     print('interfered')
     next_observation, reward, done, info = env.step(action.cpu() if isinstance(env, EnvBatcher) else action[0].cpu()) # action[0].cpu())  # Perform environment step (action repeats handled internally)
     violation = info['violation']
-    if shield_interfered or (torch.any(violation) if torch.is_tensor(violation) else violation):
+    # if shield_interfered or (torch.any(violation) if torch.is_tensor(violation) else violation):
+    if (torch.any(violation) if torch.is_tensor(violation) else violation):
       reward -= self.VIOLATION_REWARD_SCALING * violation
       
     return belief, posterior_state, action, next_observation, reward, violation, done
@@ -256,13 +257,12 @@ class LatentShieldedDreamer(Agent):
       if self.params.worldmodel_LogProbLoss:
         # observation_dist = Normal(bottle(self.observation_model, (beliefs, posterior_states)), 1)
         # observation_loss = -observation_dist.log_prob(observations[1:]).sum(dim=2 if self.params.symbolic_env else (2, 3, 4)).mean(dim=(0, 1))
-
-        observation_loss = F.cross_entropy(bottle(self.observation_model, (beliefs, posterior_states)).view(-1, 13, 5, 5), torch.argmax(observations[1:], dim=2).view(-1, 13, 5, 5), reduction="none").sum(dim=2 if self.params.symbolic_env else (2, 3, 4)).mean(dim=(0,1))
+        observation_loss = F.cross_entropy(bottle(self.observation_model, (beliefs, posterior_states)).view(-1, 13, 5, 5), torch.argmax(observations[1:], dim=2).view(-1, 5, 5), reduction="none").sum(dim=2 if self.params.symbolic_env else (1, 2)).mean(dim=(0))
 
       else: 
         # observation_loss = F.mse_loss(bottle(self.observation_model, (beliefs, posterior_states)), observations[1:], reduction='none').sum(dim=2 if self.params.symbolic_env else (2, 3, 4)).mean(dim=(0, 1))
 
-        observation_loss = F.cross_entropy(bottle(self.observation_model, (beliefs, posterior_states)).view(-1, 13, 5, 5), torch.argmax(observations[1:], dim=2).view(-1, 13, 5, 5), reduction="none").sum(dim=2 if self.params.symbolic_env else (2, 3, 4)).mean(dim=(0,1))
+        observation_loss = F.cross_entropy(bottle(self.observation_model, (beliefs, posterior_states)).view(-1, 13, 5, 5), torch.argmax(observations[1:], dim=2).view(-1, 5, 5), reduction="none").sum(dim=2 if self.params.symbolic_env else (1, 2)).mean(dim=(0))
 
       if self.params.worldmodel_LogProbLoss:
         reward_dist = Normal(bottle(self.reward_model, (beliefs, posterior_states)),1)
@@ -387,7 +387,8 @@ class LatentShieldedDreamer(Agent):
       episode_str = str(episode).zfill(len(str(self.params.episodes)))
       # TODO(@PrabSG): Check video output usefulness and performance impact
       # write_video(video_frames, 'test_episode_%s' % episode_str, self.params.results_dir)  # Lossy compression
-      save_image(torch.as_tensor(video_frames[-1]), os.path.join(self.params.results_dir, 'test_episode_%s.png' % episode_str))
+      # TODO(@PrabSG): Reformat one-hot observations to work with below image saves
+      # save_image(torch.as_tensor(video_frames[-1]), os.path.join(self.params.results_dir, 'test_episode_%s.png' % episode_str))
     torch.save(self.metrics, os.path.join(self.params.results_dir, 'metrics.pth'))
 
   def train(self, env, writer=None):

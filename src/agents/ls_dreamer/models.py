@@ -138,7 +138,7 @@ class VisualObservationModelSmall(jit.ScriptModule):
     self.conv1 = nn.ConvTranspose2d(embedding_size, 128, 1, stride=1)
     self.conv2 = nn.ConvTranspose2d(128, 64, 3, stride=1)
     self.conv3 = nn.ConvTranspose2d(64, 32, 1, stride=1)
-    self.conv4 = nn.ConvTranspose2d(32, observation_size.shape[0], 3, stride=1)
+    self.conv4 = nn.ConvTranspose2d(32, observation_size[0], 3, stride=1)
     self.modules = [self.fc1, self.conv1, self.conv2, self.conv3, self.conv4]
 
   @jit.script_method
