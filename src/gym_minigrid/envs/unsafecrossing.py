@@ -106,7 +106,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
   def gen_obs(self):
     obs = super().gen_obs()
     one_hot_image = self._to_one_hot_obs(obs["image"])
-    obs["one_hot": one_hot_image]
+    obs["one_hot"] = one_hot_image
     return obs
 
   def _to_one_hot_obs(self, obs):
@@ -126,9 +126,8 @@ class UnsafeCrossingEnv(MiniGridEnv):
     return one_hot_obs
 
   def _obj_encoding_to_one_hot(self, encoded_obj):
-    obj_idx = minigrid.IDX_TO_OBJECT[encoded_obj[0]]
     one_hot_obj = np.zeros((len(minigrid.IDX_TO_OBJECT)))
-    one_hot_obj[obj_idx] = 1
+    one_hot_obj[encoded_obj[0]] = 1
     return one_hot_obj
 
 class UnsafeCrossingSimpleEnv(UnsafeCrossingEnv):
