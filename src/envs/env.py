@@ -152,6 +152,42 @@ class MiniGridEnvWrapper(Environment):
     img_shape = self._env.observation_space["image"].shape
     return (len(minigrid.IDX_TO_OBJECT), *img_shape[:2])
 
+  @staticmethod
+  def _obj_idx_to_default_encoding(type_idx):
+    obj_type = minigrid.IDX_TO_OBJECT[type_idx]
+
+    if obj_type == 'empty':
+        return (0, 0, 0)
+    elif obj_type == 'unseen':
+      return (1, 0, 0)
+
+    if obj_type == 'wall':
+        v = minigrid.Wall()
+    elif obj_type == 'floor':
+        v = minigrid.Floor()
+    elif obj_type == 'ball':
+        v = minigrid.Ball()
+    elif obj_type == 'key':
+        v = minigrid.Key()
+    elif obj_type == 'box':
+        v = minigrid.Box(color="purple")
+    elif obj_type == 'door':
+        v = minigrid.Door(color="blue")
+    elif obj_type == 'goal':
+        v = minigrid.Goal()
+    elif obj_type == 'lava':
+        v = minigrid.Lava()
+    elif obj_type == 'agent':
+        v = minigrid.Agent()
+    elif obj_type == 'water':
+        v = minigrid.Water()
+    elif obj_type == 'glass':
+        v = minigrid.Glass()
+    else:
+        assert False, "unknown object type in decode '%s'" % obj_type
+
+    return v.encode()
+
 
 class BasicEnv(Environment):
   """2-D grid environment with single goal state.

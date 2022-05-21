@@ -149,18 +149,7 @@ class VisualObservationModelSmall(jit.ScriptModule):
     hidden = self.act_fn(self.conv2(hidden))
     hidden = self.act_fn(self.conv3(hidden))
     observation = self.conv4(hidden)
-    return self._process_pred_observation(observation)
-
-  def _process_pred_observation(self, obs):
-      obs = torch.sigmoid(obs)
-
-      index_scaling = torch.ones((3, 5, 5), dtype=torch.float, device=obs.device)
-      index_scaling[0] *= 12 # Object IDs
-      index_scaling[1] *= 5 # Color IDs
-      index_scaling[2] *= 2 # State IDs
-
-      obs = obs * index_scaling
-      return obs
+    return observation
 
 def ObservationModel(symbolic, observation_size, belief_size, state_size, embedding_size, activation_function='relu'):
   if symbolic:

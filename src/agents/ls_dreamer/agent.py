@@ -23,6 +23,7 @@ from agents.ls_dreamer.memory import ExperienceReplay
 from agents.ls_dreamer.models import ActorModel, Encoder, ObservationModel, RewardModel, TransitionModel, ValueModel, ViolationModel, bottle
 from agents.ls_dreamer.planner import MPCPlanner
 from agents.ls_dreamer.utils import FreezeParameters, imagine_ahead, lambda_return, lineplot, write_video
+from envs.env import MiniGridEnvWrapper
 from utils import visualise_agent
 
 class LSDreamerParams():
@@ -331,7 +332,7 @@ class LatentShieldedDreamer(Agent):
         vis_states = imagination_traj[1][:, 0]
         init_imag_obs = self.observation_model(init_vis_belief.unsqueeze(0), init_vis_state.unsqueeze(0)).detach().cpu().squeeze(0)
         imag_obs = self.observation_model(vis_beliefs, vis_states).detach().cpu()
-        pred_obs = [vis_observation, self._process_pred_observation(init_imag_obs)] + [self._process_pred_observation(obs) for obs in imag_obs]
+        pred_obs = [vis_observation, init_imag_obs.numpy()] + [obs.numpy() for obs in imag_obs]
       imged_beliefs, imged_prior_states, imged_prior_means, imged_prior_std_devs = imagination_traj
       with FreezeParameters(model_modules + self.value_model.modules):
         imged_reward = bottle(self.reward_model, (imged_beliefs, imged_prior_states))
@@ -505,7 +506,8 @@ class LatentShieldedDreamer(Agent):
           action_str += str(torch.argmax(a.cpu()).item())
         pred_frames = []
         for obs in pred_obs:
-          obs_t = np.round(obs.transpose(1, 2, 0))
+          obs = self._one_hot_to_encoded_observations(obs)
+          obs_t = obs.transpose(1, 2, 0)
           pred_frames.append(np.moveaxis(env._env.get_obs_render(obs_t), 2, 0))
         imag_dir = self.params.args.results_dir + f"/imagine_preds"
         os.makedirs(imag_dir, exist_ok=True)
@@ -532,14 +534,15 @@ class LatentShieldedDreamer(Agent):
     # TODO(@PrabSG): Deprecate this function and find better way to yield states for visualisations
     return super().choose_action()
 
-  def _process_pred_observation(self, pred_obs):
-    pred_obs = pred_obs.numpy()
-    
-    pred_obs = pred_obs.round()
-    # pred_obs[0] = np.clip(pred_obs[0], 0, 12) # Object IDs
-    # pred_obs[1] = np.clip(pred_obs[1], 0, 5) # Color IDs
-    # pred_obs[2] = np.clip(pred_obs[2], 0, 2) # State IDs
-    return pred_obs
+  def _one_hot_to_encoded_observations(self, obs):
+    obs_obj_idxs = np.argmax(obs, axis=0)
+    encoded_obs = np.zeros((3, *obs.shape[1:]))
+    for i in range(obs.shape[1]):
+      for j in range(obs.shape[2]):
+        encoding = MiniGridEnvWrapper._obj_idx_to_default_encoding(obs_obj_idxs[i, j])
+        for k in range(len(encoding)):
+          encoded_obs[k, i, j] = encoding[k]
+    return encoded_obs
 
   def _visualise_observation_prediction(self, env, episode=None):
     if episode is None:
@@ -558,12 +561,12 @@ class LatentShieldedDreamer(Agent):
       pbar = tqdm(range(self.params.max_episode_length // self.params.action_repeat))
 
       for t in pbar:
-        obs_frames.append(np.moveaxis(env._env.get_obs_render(observation.cpu().numpy().transpose(1, 2, 0)), 2, 0))
+        obs_frames.append(np.moveaxis(env._env.get_obs_render(self._one_hot_to_encoded_observations(observation.cpu().numpy()).transpose(1, 2, 0)), 2, 0))
 
         belief, posterior_state, action, next_observation, reward, violation, done = self._update_belief_and_act(env, belief, posterior_state, action, observation.to(device=self.params.device), violation, None, episode)
         total_reward += reward
         pred_obs = self.observation_model(belief, posterior_state).cpu()
-        pred_obs = np.round(pred_obs.squeeze().numpy())
+        pred_obs = self._one_hot_to_encoded_observations(pred_obs.squeeze().numpy())
         pred_frames.append(np.moveaxis(env._env.get_obs_render(pred_obs.transpose(1, 2, 0)), 2, 0))
         observation = next_observation
         if done:
