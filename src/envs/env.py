@@ -5,6 +5,8 @@ import numpy as np
 import torch
 import gym
 
+from gym_minigrid import minigrid
+
 def init_env(args):
   if args.env == "basic":
     return BasicEnv()
@@ -148,7 +150,7 @@ class MiniGridEnvWrapper(Environment):
   def state_size(self):
     """Return image state space shape as C x H x W."""
     img_shape = self._env.observation_space["image"].shape
-    return (img_shape[2], *img_shape[:2])
+    return (len(minigrid.IDX_TO_OBJECT), *img_shape[:2])
 
 
 class BasicEnv(Environment):

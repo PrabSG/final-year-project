@@ -129,15 +129,16 @@ class VisualObservationModel(jit.ScriptModule):
 class VisualObservationModelSmall(jit.ScriptModule):
   __constants__ = ['embedding_size']
   
-  def __init__(self, belief_size, state_size, embedding_size, activation_function='relu'):
+  def __init__(self, observation_size, belief_size, state_size, embedding_size, activation_function='relu'):
     super().__init__()
     self.act_fn = getattr(F, activation_function)
     self.embedding_size = embedding_size
+    self.observation_size = observation_size
     self.fc1 = nn.Linear(belief_size + state_size, embedding_size)
     self.conv1 = nn.ConvTranspose2d(embedding_size, 128, 1, stride=1)
     self.conv2 = nn.ConvTranspose2d(128, 64, 3, stride=1)
     self.conv3 = nn.ConvTranspose2d(64, 32, 1, stride=1)
-    self.conv4 = nn.ConvTranspose2d(32, 3, 3, stride=1)
+    self.conv4 = nn.ConvTranspose2d(32, observation_size[0], 3, stride=1)
     self.modules = [self.fc1, self.conv1, self.conv2, self.conv3, self.conv4]
 
   @jit.script_method
@@ -166,8 +167,10 @@ def ObservationModel(symbolic, observation_size, belief_size, state_size, embedd
     return SymbolicObservationModel(observation_size, belief_size, state_size, embedding_size, activation_function)
   elif observation_size == (3, 64, 64):
     return VisualObservationModel(belief_size, state_size, embedding_size, activation_function)
+  elif observation_size[1:] == (5, 5):
+    return VisualObservationModelSmall(observation_size, belief_size, state_size, embedding_size, activation_function)
   else:
-    return VisualObservationModelSmall(belief_size, state_size, embedding_size, activation_function)
+    raise NotImplementedError
 
 
 class RewardModel(jit.ScriptModule):
@@ -360,11 +363,12 @@ class VisualEncoder(jit.ScriptModule):
 class VisualEncoderSmall(jit.ScriptModule):
   __constants__ = ['embedding_size']
   
-  def __init__(self, embedding_size, activation_function='relu'):
+  def __init__(self, observation_size, embedding_size, activation_function='relu'):
     super().__init__()
     self.act_fn = getattr(F, activation_function)
     self.embedding_size = embedding_size
-    self.conv1 = nn.Conv2d(3, 16, 3, padding='same')
+    self.observation_size = observation_size
+    self.conv1 = nn.Conv2d(observation_size[0], 16, 3, padding='same')
     self.conv2 = nn.Conv2d(16, 32, 3, stride=1, padding='same')
     self.conv3 = nn.Conv2d(32, 64, 3, stride=1, padding='same')
     self.conv4 = nn.Conv2d(64, 128, 5, stride=1)
@@ -386,8 +390,10 @@ def Encoder(symbolic, observation_size, embedding_size, activation_function='rel
     return SymbolicEncoder(observation_size, embedding_size, activation_function)
   elif observation_size == (3, 64, 64):
     return VisualEncoder(embedding_size, activation_function)
+  elif observation_size[1:] == (5, 5):
+    return VisualEncoderSmall(observation_size, embedding_size, activation_function)
   else:
-    return VisualEncoderSmall(embedding_size, activation_function)
+    raise NotImplementedError
 
 
 # "atanh", "TanhBijector" and "SampleDist" are from the following repo

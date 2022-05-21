@@ -33,6 +33,7 @@ class ExperienceReplay():
         observation.numpy(), self.bit_depth
       )  # Decentre and discretise visual observations (to save memory)
     else:
+      # TODO(@PrabSG): Add pre/post processing for storing one-hot visual observations
       self.observations[self.idx] = observation.numpy()
     self.actions[self.idx] = action.numpy()
     self.rewards[self.idx] = reward
