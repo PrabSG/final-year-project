@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 
 from agents.adapt.models import EncoderModel
+from agents.adapt.models.decoder import DecoderModel
 from agents.adapt.models.rssm import RSSMState
 
 class AgentModel(nn.Module):
@@ -38,7 +39,7 @@ class AgentModel(nn.Module):
 
     self.encoder = EncoderModel(input_shape)
     encoder_embed_size = self.encoder.embed_size
-    self.decoder = DecoderModel(rssm_state_size, input_shape)
+    self.decoder = DecoderModel(encoder_embed_size, input_shape)
     self.transition_model = TransitionModel(self.action_size, stochastic_size, deterministic_size, transition_hidden)
     self.representation_model = RepresentationModel(self.transition_model, encoder_embed_size, self.action_size, stochastic_size, deterministic_size, transition_hidden)
     self.action_model = ActionModel(rssm_state_size, self.action_size, action_hidden, action_layers, action_dist)
