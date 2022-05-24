@@ -1,15 +1,18 @@
-from curses import has_colors
 import itertools
 
-from numpy import dtype
-from agents.adapt.replay import initialize_replay_buffer, samples_to_buffer
-
+from rlpyt.rlpyt.agents.base import BaseAgent
 from rlpyt.rlpyt.algos.base import RlAlgorithm
 from rlpyt.rlpyt.replays.sequence.n_step import SamplesFromReplay
+from rlpyt.rlpyt.utils.buffer import buffer_method, buffer_to
 from rlpyt.rlpyt.utils.collections import namedarraytuple
 from rlpyt.rlpyt.utils.quick_args import save__init__args
 from rlpyt.rlpyt.utils.tensor import infer_leading_dims
 import torch
+import torch.distributions as td
+from tqdm import tqdm
+
+from agents.adapt.replay import initialize_replay_buffer, samples_to_buffer
+from agents.adapt.utils import FreezeParameters
 
 loss_info_fields = ["model_loss", "actor_loss", "value_loss", "prior_entropy", "post_entropy", "divergence",
                     "reward_loss", "image_loss"]
@@ -48,6 +51,7 @@ class Dreamer(RlAlgorithm):
     n_step_return=1,
     updates_per_sync=1,
     free_nats=3,
+    kl_balancing=0.8,
     kl_scale=0.1,
     type=torch.float,
     prefill=5000,
@@ -67,7 +71,7 @@ class Dreamer(RlAlgorithm):
     self.optimizer = None
     self.type = type
 
-  def initialize(self, agent, n_itr, batch_spec, mid_batch_reset, examples, world_size=1, rank=0):
+  def initialize(self, agent: BaseAgent, n_itr, batch_spec, mid_batch_reset, examples, world_size=1, rank=0):
     self.agent = agent
     self.n_itr = n_itr
     self.batch_spec = batch_spec
@@ -179,7 +183,58 @@ class Dreamer(RlAlgorithm):
     batch_size = batch_t * batch_b
 
     encoded = model.encoder(observations)
-    prev_state = model.representation_model.initial_state(batch_b, device=actions.device, dtype=actions.dtype)
+    init_states = model.representation_model.initial_state(batch_b, device=actions.device, dtype=actions.dtype)
+    # Rollout model to compare against seen experience
+    priors, posteriors = model.rollout.rollout_representation(batch_t, encoded, actions, init_states)
+
+    # Compute Losses
+    # Model Loss
+    state = torch.cat((posteriors.stoch, posteriors.det), dim=-1)
+    pred_obs = model.decoder(state)
+    pred_reward = model.reward_model(state)
+    reward_loss = -torch.mean(pred_reward.log_prob(rewards))
+    obs_loss = -torch.mean(pred_obs.log_prob(observations))
+    # Calculate KL Divergence using KL balancing to train priors quicker
+    kl_div = self.kl_balancing * td.kl_divergence(
+      td.Normal(posteriors.mean.detach(), posteriors.std.detach()),
+      td.Normal(priors.mean, priors.std)
+    )
+    kl_div += (1 - self.kl_balancing) * td.kl_divergence(
+      td.Normal(posteriors.mean, posteriors.std),
+      td.Normal(priors.mean.detach(), priors.std.detach())
+    )
+    kl_loss = torch.mean(kl_div, dim=0)
+    if self.free_nats is not None:
+      kl_loss = torch.max(kl_loss - self.free_nats, torch.zeros_like(kl_loss, device=kl_loss.device))
+    model_loss = self.kl_scale * kl_loss + reward_loss + obs_loss
+
+    # Actor Loss
+    with torch.no_grad():
+      flattened_posterior = buffer_method(posteriors, "reshape", batch_size, -1)
+    # Rollout policy for horizon, H, steps
+    with FreezeParameters(self.model_modules):
+      imag_rssm_state, _ = model.rollout.rollout_policy(self.horizon, model.policy, flattened_posterior)
+    imag_state = torch.cat((imag_rssm_state.stoch, imag_rssm_state.det), dim=-1)
+    with FreezeParameters(self.model_modules + self.value_modules):
+      imag_reward = model.reward_model(imag_state).mean
+      value = model.value_model(imag_state).mean
+    returns = self.compute_return(imag_reward[:-1], value[:-1], self.discount, bootstrap=value[-1], lambda_=self.discount_lambda)
 
 
-      
+    
+
+  def compute_return(self, imag_reward, pred_value, discount, bootstrap, lambda_):
+    """Compute the discounted reward given a batch of imagined rewards and values."""
+    next_values = torch.cat([pred_value[1:], bootstrap.unsqueeze(0)], dim=0)
+    discount = discount * torch.ones_like(imag_reward)
+    target = imag_reward + discount * next_values * (1 - lambda_)
+    outputs = []
+    acc_reward = bootstrap
+    timesteps = range(imag_reward.shape[0] - 1, -1, -1)
+    for t in timesteps:
+      acc_reward = target[t] + discount[t] * lambda_ * acc_reward
+      outputs.append(acc_reward)
+    returns = torch.flip(torch.stack(outputs), [0])
+    return returns
+
+    
