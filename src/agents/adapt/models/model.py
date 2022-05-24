@@ -6,7 +6,7 @@ import torch.nn as nn
 
 from agents.adapt.models import EncoderModel
 from agents.adapt.models.decoder import DecoderModel
-from agents.adapt.models.rssm import RSSMState
+from agents.adapt.models.rssm import RSSMState, RepresentationModel, TransitionModel
 
 class AgentModel(nn.Module):
   def __init__(
@@ -46,6 +46,7 @@ class AgentModel(nn.Module):
     self.reward_model = RewardModel(rssm_state_size, reward_shape, reward_hidden, reward_layers)
     self.value_model = ValueModel(rssm_state_size, value_shape, value_hidden, value_layers)
 
+    self.rollout = RSSMRollout(self.representation_model, self.transition_model)
     self.dtype = dtype
     self.stochastic_size = stochastic_size
     self.deterministic_size = deterministic_size
