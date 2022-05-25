@@ -102,8 +102,8 @@ class UnsafeCrossingEnv(MiniGridEnv):
       else:
         return 1
     else:
-      # return 0
-      return -0.5 / self.max_steps
+      return 0
+      # return -0.5 / self.max_steps
 
   def gen_obs(self):
     obs = super().gen_obs()
