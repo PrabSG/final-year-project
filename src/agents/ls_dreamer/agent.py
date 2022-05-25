@@ -413,7 +413,7 @@ class LatentShieldedDreamer(Agent):
         next_observation, reward, done, info = env.step(action)
         violation = info['violation']
         if violation:
-          reward -= self.VIOLATION_REWARD_SCALING
+          # reward -= self.VIOLATION_REWARD_SCALING
           violation_count += 1
         self.D.append(observation, action, reward, violation, done)
         observation = next_observation
