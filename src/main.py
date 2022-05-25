@@ -13,7 +13,7 @@ from envs.env import init_env, BasicEnv, MiniGridEnvWrapper
 from utils import plot_training, visualise_agent
 
 AGENT_CHOICES = ["random", "ddqn", "ls-dreamer"]
-ENV_CHOICES = ["basic", "unsafe-simple", "unsafe-micro", "unsafe-small", "unsafe-med"]
+ENV_CHOICES = ["basic", "unsafe-simple", "unsafe-micro", "unsafe-small", "unsafe-med", "twopath"]
 MAX_EPISODE_LENGTH = 50
 NUM_TRAINING_EPISODES = 100
 NUM_TESTING_EPISODES = 10

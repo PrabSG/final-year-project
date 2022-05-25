@@ -18,6 +18,8 @@ def init_env(args):
     return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingN1-v0", max_steps=args.max_episode_length)
   elif args.env == "unsafe-med":
     return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingN2-v0", max_steps=args.max_episode_length)
+  elif args.env == "twopath":
+    return MiniGridEnvWrapper("MiniGrid-TwoPathSimple-v0", max_steps=args.max_episode_length)
   else:
     raise ValueError(f"Environment Type '{args.env}' not defined.")
 
