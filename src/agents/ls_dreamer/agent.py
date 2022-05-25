@@ -240,8 +240,8 @@ class LatentShieldedDreamer(Agent):
     next_observation, reward, done, info = env.step(action.cpu() if isinstance(env, EnvBatcher) else action[0].cpu()) # action[0].cpu())  # Perform environment step (action repeats handled internally)
     violation = info['violation']
     # if shield_interfered or (torch.any(violation) if torch.is_tensor(violation) else violation):
-    if (torch.any(violation) if torch.is_tensor(violation) else violation):
-      reward -= self.VIOLATION_REWARD_SCALING * violation
+    # if (torch.any(violation) if torch.is_tensor(violation) else violation):
+    #   reward -= self.VIOLATION_REWARD_SCALING * violation
       
     return belief, posterior_state, action, next_observation, reward, violation, done
 
