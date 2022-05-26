@@ -6,6 +6,7 @@ import gym
 import gym_minigrid
 from gym_minigrid.register import register
 from gym_minigrid.window import Window
+from gym_minigrid.wrappers import RGBImgPartialObsWrapper, ImgObsWrapper
 
 def redraw(img):
     if not args.agent_view:
