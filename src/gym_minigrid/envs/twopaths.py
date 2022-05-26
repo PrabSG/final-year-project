@@ -25,15 +25,15 @@ class TwoPathEnv(MiniGridEnv):
   def _gen_grid(self, width, height):
     self.grid = Grid(width, height)
     self.grid.wall_rect(0, 0, width, height)
-    self.grid.vert_wall((width // 2) - 1, 1, length=5)
-    self.grid.vert_wall((width // 2) + 1, 1, length=5)
+    self.grid.vert_wall((width // 2) - 1, 1, length=(height - 2))
+    self.grid.vert_wall((width // 2) + 1, 1, length=(height - 2))
     self.agent_pos = (width // 2, height // 2)
     self.agent_dir = 0 # Right
 
     rand_pos = int(self._rand_bool())
 
-    self.put_obj(Goal(), 2, rand_pos * 4)
-    self.put_obj(Lava(), 2, (1 - rand_pos) * 4)
+    self.put_obj(Goal(), width // 2, rand_pos * 4 + 1)
+    self.put_obj(Lava(), width // 2, (1 - rand_pos) * 4 + 1)
 
     self.mission = (
       f"avoid the lava and get to the green goal square"
