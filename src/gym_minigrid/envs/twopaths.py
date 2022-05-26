@@ -17,15 +17,17 @@ class TwoPathEnv(MiniGridEnv):
     seed=None,
     **kwargs
   ):
-    grid_size=(5,5)
+    self.obstacle_type = "lava"
+    grid_size=7
     super().__init__(grid_size=grid_size, seed=seed, agent_view_size=5, **kwargs)
     self.actions = TwoPathEnv.Actions
 
   def _gen_grid(self, width, height):
     self.grid = Grid(width, height)
-    self.grid.vert_wall(1, 0, length=5)
-    self.grid.vert_wall(3, 0, length=5)
-    self.agent_pos = (2, height // 2)
+    self.grid.wall_rect(0, 0, width, height)
+    self.grid.vert_wall((width // 2) - 1, 1, length=5)
+    self.grid.vert_wall((width // 2) + 1, 1, length=5)
+    self.agent_pos = (width // 2, height // 2)
     self.agent_dir = 0 # Right
 
     rand_pos = int(self._rand_bool())
@@ -61,6 +63,11 @@ class TwoPathEnv(MiniGridEnv):
         one_hot_obs[i, j] = self._obj_encoding_to_one_hot(obs[i, j])
 
     return one_hot_obs
+
+  def _obj_encoding_to_one_hot(self, encoded_obj):
+    one_hot_obj = np.zeros((len(minigrid.IDX_TO_OBJECT)))
+    one_hot_obj[encoded_obj[0]] = 1
+    return one_hot_obj
   
 
 class TwoPathEnvSimple(TwoPathEnv):
