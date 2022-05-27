@@ -276,8 +276,8 @@ class LatentShieldedDreamer(Agent):
         reward_loss = F.mse_loss(bottle(self.reward_model, (beliefs, posterior_states)), rewards[:-1], reduction='none').mean(dim=(0,1))
         # if episode > 50:
       violation_loss = F.cross_entropy(
-        bottle(self.violation_model, (beliefs, posterior_states, )).reshape(len(violations[:-1]) * len(violations), 2), 
-        violations[:-1].reshape(len(violations[:-1]) * len(violations)),
+        bottle(self.violation_model, (beliefs, posterior_states, )).reshape(len(violations[:-1]) * violations.size(1), 2), 
+        violations[:-1].reshape(len(violations[:-1]) * violations.size(1)),
         weight=torch.tensor([1.,3.]).to(self.params.device),
         reduction='none'
         ).mean()
