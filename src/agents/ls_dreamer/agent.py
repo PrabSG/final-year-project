@@ -10,7 +10,7 @@ from array2gif import write_gif
 import numpy as np
 import torch
 from torch import nn, optim
-from torch.distributions import Normal
+from torch.distributions import Normal, OneHotCategorical
 from torch.distributions.kl import kl_divergence
 from torch.nn import functional as F
 from torchvision.utils import make_grid, save_image
@@ -59,7 +59,7 @@ class LSDreamerParams():
                kl_scaling_beta=0.1,
                free_nats=3,
                bit_depth=3,
-               model_learning_rate=6e-4,
+               model_learning_rate=1e-3,
                actor_learning_rate=8e-5,
                value_learning_rate=8e-5,
                learning_rate_schedule=0,
@@ -261,8 +261,9 @@ class LatentShieldedDreamer(Agent):
       if self.params.worldmodel_LogProbLoss:
         # observation_dist = Normal(bottle(self.observation_model, (beliefs, posterior_states)), 1)
         # observation_loss = -observation_dist.log_prob(observations[1:]).sum(dim=2 if self.params.symbolic_env else (2, 3, 4)).mean(dim=(0, 1))
-        observation_loss = F.cross_entropy(bottle(self.observation_model, (beliefs, posterior_states)).view(-1, 13, 5, 5), torch.argmax(observations[1:], dim=2).view(-1, 5, 5), reduction="none").sum(dim=2 if self.params.symbolic_env else (1, 2)).mean(dim=(0))
-
+        # observation_loss = F.cross_entropy(bottle(self.observation_model, (beliefs, posterior_states)).view(-1, 13, 5, 5), torch.argmax(observations[1:], dim=2).view(-1, 5, 5), reduction="none").sum(dim=2 if self.params.symbolic_env else (1, 2)).mean(dim=(0))
+        observation_dist = OneHotCategorical(logits=bottle(self.observation_model, (beliefs, posterior_states)).permute(0, 1, 3, 4, 2))
+        observation_loss = -observation_dist.log_prob(observations[1:].permute(0, 1, 3, 4, 2)).sum(dim=(2, 3).mean(dim=(0, 1)))
       else: 
         # observation_loss = F.mse_loss(bottle(self.observation_model, (beliefs, posterior_states)), observations[1:], reduction='none').sum(dim=2 if self.params.symbolic_env else (2, 3, 4)).mean(dim=(0, 1))
 
@@ -479,7 +480,8 @@ class LatentShieldedDreamer(Agent):
         writer.add_scalar("reward_loss", self.metrics['reward_loss'][-1], self.metrics['steps'][-1])
         writer.add_scalar("kl_loss", self.metrics['kl_loss'][-1], self.metrics['steps'][-1])
         writer.add_scalar("actor_loss", self.metrics['actor_loss'][-1], self.metrics['steps'][-1])
-        writer.add_scalar("value_loss", self.metrics['value_loss'][-1], self.metrics['steps'][-1])  
+        writer.add_scalar("value_loss", self.metrics['value_loss'][-1], self.metrics['steps'][-1])
+        writer.add_scalar("violation_loss", self.metrics["violation_loss"][-1], self.metrics["steps"][-1])
       print("episodes: {}, total_steps: {}, train_reward: {}, violations: {} ".format(self.metrics['episodes'][-1], self.metrics['steps'][-1], self.metrics['train_rewards'][-1], self.metrics['violation_count'][-1][1]))
 
       # Checkpoint models
