@@ -56,7 +56,7 @@ class LSDreamerParams():
                overshooting_reward_scale=0,
                global_kl_beta=0,
                kl_balancing_alpha=0.8,
-               kl_scaling_beta=0.2,
+               kl_scaling_beta=0.1,
                free_nats=3,
                bit_depth=3,
                model_learning_rate=6e-4,
@@ -196,7 +196,9 @@ class LatentShieldedDreamer(Agent):
     self.shield = BoundedPrescienceShield(self.transition_model, self.violation_model, violation_threshold=params.violation_threshold, paths_to_sample=params.paths_to_sample)
 
     self.global_prior = Normal(torch.zeros(params.batch_size, params.state_size, device=params.device), torch.ones(params.batch_size, params.state_size, device=params.device))  # Global prior N(0, I)
-    self.free_nats = torch.full((1, ), params.free_nats, device=params.device)  # Allowed deviation in KL divergence
+    
+    if params.free_nats != 0:
+      self.free_nats = torch.full((1, ), params.free_nats, device=params.device)  # Allowed deviation in KL divergence
 
   def _class_weighted_bce_loss(self, pred, target, positive_weight, negative_weight):
     # Calculate class-weighted BCE loss
@@ -285,8 +287,8 @@ class LatentShieldedDreamer(Agent):
       kl_loss = self.params.kl_balancing_alpha * kl_divergence(Normal(posterior_means.detach(), posterior_std_devs.detach()), Normal(prior_means, prior_std_devs)).sum(dim=2)
       kl_loss += (1 - self.params.kl_balancing_alpha) * kl_divergence(Normal(posterior_means, posterior_std_devs), Normal(prior_means.detach(), prior_std_devs.detach())).sum(dim=2)
       kl_loss = kl_loss.mean(dim=(0,1))
-      if self.params.free_nats is not None:
-        kl_loss = torch.max(kl_loss - self.params.free_nats, torch.zeros_like(kl_loss))
+      if self.params.free_nats != 0:
+        kl_loss = torch.max(kl_loss - self.free_nats, torch.zeros_like(kl_loss))
       # kl_loss = torch.max(div, free_nats).mean(dim=(0, 1))  # Note that normalisation by overshooting distance and weighting by overshooting distance cancel out
       if self.params.global_kl_beta != 0:
         kl_loss += self.params.global_kl_beta * kl_divergence(Normal(posterior_means, posterior_std_devs), self.global_prior).sum(dim=2).mean(dim=(0, 1))
