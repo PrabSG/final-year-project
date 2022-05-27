@@ -33,9 +33,9 @@ def init_agent(agent_type, env, args):
   elif agent_type == "ls-dreamer":
     params = LSDreamerParams(
       args, args.results_dir, episodes=args.train_episodes, test=True, test_interval=25,
-      test_episodes=5, max_episode_length=args.max_episode_length, embedding_size=256,
+      test_episodes=5, max_episode_length=args.max_episode_length, embedding_size=512,
       vis_freq=args.vis_freq, seed_episodes=15, planning_horizon=5, belief_size=200, state_size=30,
-      eps_decay=50000, worldmodel_LogProbLoss=True,
+      eps_decay=200000, worldmodel_LogProbLoss=True,
       device=device)
     return LatentShieldedDreamer(params, env)
   else:
@@ -60,7 +60,7 @@ if __name__ == "__main__":
   parser.add_argument("--disable-cuda", action="store_true", help="Disable CUDA")
   # Script options
   parser.add_argument("--id", type=str, help="ID for results of run")
-  parser.add_argument("--result-dir", type=str, default=DEFAULT_RESULT_DIR, help="Path of folder to place logs and results from runs")
+  parser.add_argument("--results-dir", type=str, default=DEFAULT_RESULT_DIR, help="Path of folder to place logs and results from runs")
   parser.add_argument("--test-episodes", type=int, default=NUM_TESTING_EPISODES, help="Number of episodes to test the agent")
   parser.add_argument("--vis-eps", type=int, default=VISUALISATION_EPISODES, help="Number of episodes to visualise at each visualisation checkpoint")
   parser.add_argument("--vis-freq", type=int, default=VISUALISATION_FREQUENCY, help="Number of episodes between ")
