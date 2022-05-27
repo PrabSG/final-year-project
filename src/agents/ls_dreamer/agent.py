@@ -263,7 +263,7 @@ class LatentShieldedDreamer(Agent):
         # observation_loss = -observation_dist.log_prob(observations[1:]).sum(dim=2 if self.params.symbolic_env else (2, 3, 4)).mean(dim=(0, 1))
         # observation_loss = F.cross_entropy(bottle(self.observation_model, (beliefs, posterior_states)).view(-1, 13, 5, 5), torch.argmax(observations[1:], dim=2).view(-1, 5, 5), reduction="none").sum(dim=2 if self.params.symbolic_env else (1, 2)).mean(dim=(0))
         observation_dist = OneHotCategorical(logits=bottle(self.observation_model, (beliefs, posterior_states)).permute(0, 1, 3, 4, 2))
-        observation_loss = -observation_dist.log_prob(observations[1:].permute(0, 1, 3, 4, 2)).sum(dim=(2, 3).mean(dim=(0, 1)))
+        observation_loss = -observation_dist.log_prob(observations[1:].permute(0, 1, 3, 4, 2)).sum(dim=(2, 3)).mean(dim=(0, 1))
       else: 
         # observation_loss = F.mse_loss(bottle(self.observation_model, (beliefs, posterior_states)), observations[1:], reduction='none').sum(dim=2 if self.params.symbolic_env else (2, 3, 4)).mean(dim=(0, 1))
 
