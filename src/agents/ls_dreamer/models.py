@@ -195,8 +195,8 @@ class ViolationModel(jit.ScriptModule):
   def forward(self, belief, state):
     x = torch.cat([belief, state],dim=1)
     hidden = self.act_fn(self.fc1(x))
-    # hidden = self.act_fn(self.fc2(hidden))
-    # hidden = self.act_fn(self.fc3(hidden))
+    hidden = self.act_fn(self.fc2(hidden))
+    hidden = self.act_fn(self.fc3(hidden))
     violation = torch.softmax(self.act_fn(self.fc4(hidden)), dim=1).squeeze(dim=1)
     return violation
 
@@ -357,11 +357,11 @@ class VisualEncoderSmall(jit.ScriptModule):
     self.act_fn = getattr(F, activation_function)
     self.embedding_size = embedding_size
     self.observation_size = observation_size
-    self.conv1 = nn.Conv2d(observation_size[0], 16, 3, padding='same')
-    self.conv2 = nn.Conv2d(16, 32, 3, stride=1, padding='same')
-    self.conv3 = nn.Conv2d(32, 64, 3, stride=1, padding='same')
-    self.conv4 = nn.Conv2d(64, 128, 5, stride=1)
-    self.fc = nn.Identity() if embedding_size == 128 else nn.Linear(128, embedding_size)
+    self.conv1 = nn.Conv2d(observation_size[0], 32, 3, padding='same')
+    self.conv2 = nn.Conv2d(32, 64, 3, stride=1, padding='same')
+    self.conv3 = nn.Conv2d(64, 128, 3, stride=1, padding='same')
+    self.conv4 = nn.Conv2d(128, 256, 5, stride=1)
+    self.fc = nn.Identity() if embedding_size == 256 else nn.Linear(256, embedding_size)
     self.modules = [self.conv1, self.conv2, self.conv3, self.conv4]
 
   @jit.script_method
@@ -370,7 +370,7 @@ class VisualEncoderSmall(jit.ScriptModule):
     hidden = self.act_fn(self.conv2(hidden))
     hidden = self.act_fn(self.conv3(hidden))
     hidden = self.act_fn(self.conv4(hidden))
-    hidden = hidden.view(-1, 128)
+    hidden = hidden.view(-1, 256)
     hidden = self.fc(hidden)  # Identity if embedding size is 128 else linear projection
     return hidden
 
