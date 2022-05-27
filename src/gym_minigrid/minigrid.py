@@ -1164,6 +1164,7 @@ class MiniGridEnv(gym.Env):
     def step(self, action):
         self.step_count += 1
 
+        self.no_change = False
         reward = self._reward(done=False)
         done = False
         info = {'violation': 0}
@@ -1188,6 +1189,8 @@ class MiniGridEnv(gym.Env):
         elif action == self.actions.forward:
             if fwd_cell == None or fwd_cell.can_overlap():
                 self.agent_pos = fwd_pos
+            else:
+                self.no_change = True
             if fwd_cell != None and fwd_cell.type == 'goal':
                 done = True
                 reward = self._reward(done=done)
