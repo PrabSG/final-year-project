@@ -15,8 +15,10 @@ from utils import plot_training, visualise_agent
 AGENT_CHOICES = ["random", "ddqn", "ls-dreamer"]
 ENV_CHOICES = ["basic", "unsafe-simple", "unsafe-micro", "unsafe-small", "unsafe-med", "twopath"]
 MAX_EPISODE_LENGTH = 50
+SEED_EPISODES = 5
 NUM_TRAINING_EPISODES = 100
 NUM_TESTING_EPISODES = 10
+EPS_DECAY = 200000
 VISUALISATION_EPISODES = 5
 VISUALISATION_FREQUENCY = 25
 DEFAULT_RESULT_DIR = "../results/"
@@ -33,9 +35,9 @@ def init_agent(agent_type, env, args):
   elif agent_type == "ls-dreamer":
     params = LSDreamerParams(
       args, args.results_dir, episodes=args.train_episodes, test=True, test_interval=25,
-      test_episodes=5, max_episode_length=args.max_episode_length, embedding_size=512,
-      vis_freq=args.vis_freq, seed_episodes=15, planning_horizon=5, belief_size=200, state_size=30,
-      eps_decay=200000, worldmodel_LogProbLoss=True,
+      test_episodes=5, max_episode_length=args.max_episode_length, embedding_size=256,
+      vis_freq=args.vis_freq, seed_episodes=args.seed_episodes, planning_horizon=5, belief_size=200,
+      state_size=30, eps_decay=args.eps_decay, worldmodel_LogProbLoss=True,
       device=device)
     return LatentShieldedDreamer(params, env)
   else:
@@ -57,6 +59,8 @@ if __name__ == "__main__":
   # Agent arguments
   parser.add_argument("--agent", default="random", choices=AGENT_CHOICES, help="Agent Type")
   parser.add_argument("--train-episodes", type=int, default=NUM_TRAINING_EPISODES, help="Number of episodes allocated for training the agent")
+  parser.add_argument("--seed-episodes", type=int, default=SEED_EPISODES)
+  parser.add_argument("--eps-decay", type=int, default=EPS_DECAY)
   parser.add_argument("--disable-cuda", action="store_true", help="Disable CUDA")
   # Script options
   parser.add_argument("--id", type=str, help="ID for results of run")
