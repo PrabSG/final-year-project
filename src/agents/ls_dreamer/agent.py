@@ -518,16 +518,18 @@ class LatentShieldedDreamer(Agent):
         pred_fname = f"/imagine_ep{episode}_pred_action_{action_str}.gif"
         write_gif(pred_frames, imag_dir + pred_fname, fps=1/0.25)
 
-        obs, preds = self._visualise_observation_prediction(env, episode=episode)
+        obs, priors, posts = self._visualise_observation_prediction(env, episode=episode)
 
         save_dir = self.params.args.results_dir + f"/ep{episode}_frame_preds"
         os.makedirs(save_dir, exist_ok=True)
 
         for i in range(len(obs)):
           ob_fname = f"/frame_ep{episode}_f{i}_seen.gif"
-          pred_fname = f"/frame_ep{episode}_f{i}_pred.gif"
+          prior_fname = f"/frame_ep{episode}_f{i}_prior.gif"
+          post_fname = f"/frame_ep{episode}_f{i}_post.gif"
           write_gif(obs[i], save_dir + ob_fname)
-          write_gif(preds[i], save_dir + pred_fname)
+          write_gif(priors[i], save_dir + prior_fname)
+          write_gif(posts[i], save_dir + post_fname)
 
         visualise_agent(env, self, self.params.args, episode=episode)
 
@@ -553,6 +555,7 @@ class LatentShieldedDreamer(Agent):
       epsiode = self.params.episodes
     
     obs_frames = []
+    prior_frames = []
     pred_frames = []
 
     self.evaluate_mode()
@@ -569,8 +572,14 @@ class LatentShieldedDreamer(Agent):
 
         belief, posterior_state, action, next_observation, reward, violation, done = self._update_belief_and_act(env, belief, posterior_state, action, observation.to(device=self.params.device), violation, None, episode)
         total_reward += reward
+        prior_mu, _prior_std = torch.chunk(self.transition_model.fc_state_prior(self.transition_model.fc_embed_belief_prior(belief)), 2, dim=1)
+        prior_std = F.softplus(_prior_std) + 0.1
+        prior_state = prior_mu + prior_std * torch.randn_like(prior_mu)
+        prior_obs = self.observation_model(belief, prior_state).cpu()
+        prior_obs = self._one_hot_to_encoded_observations(prior_obs.squeeze().numpy())
         pred_obs = self.observation_model(belief, posterior_state).cpu()
         pred_obs = self._one_hot_to_encoded_observations(pred_obs.squeeze().numpy())
+        prior_frames.append(np.moveaxis(env._env.get_obs_render(prior_obs.transpose(1, 2, 0)), 2, 0))
         pred_frames.append(np.moveaxis(env._env.get_obs_render(pred_obs.transpose(1, 2, 0)), 2, 0))
         observation = next_observation
         if done:
@@ -579,7 +588,7 @@ class LatentShieldedDreamer(Agent):
       
     self.train_mode()
 
-    return obs_frames, pred_frames
+    return obs_frames, prior_frames, pred_frames
 
 
   def run_tests(self, n_episodes, env, args, print_logging=False, visualise=False, episode=None):
