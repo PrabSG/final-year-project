@@ -2,6 +2,8 @@ from typing import Iterable
 
 import torch.nn as nn
 
+def get_params(modules: Iterable[nn.Module]):
+    return map(lambda m: m.parameters(), modules)
 
 def get_parameters(modules: Iterable[nn.Module]):
     """

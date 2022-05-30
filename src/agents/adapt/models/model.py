@@ -4,14 +4,19 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from agents.adapt.models import EncoderModel
+from agents.adapt.models.encoder import EncoderModel
+from agents.adapt.models.action import ActionModel
 from agents.adapt.models.decoder import DecoderModel
-from agents.adapt.models.rssm import RSSMState, RepresentationModel, TransitionModel
+from agents.adapt.models.reward import RewardModel
+from agents.adapt.models.rssm import RSSMRollout, RSSMState, RepresentationModel, TransitionModel
+from agents.adapt.models.value import ValueModel
+from rlpyt.utils.buffer import buffer_func
 
 class AgentModel(nn.Module):
   def __init__(
     self,
     action_shape,
+    embedding_size=128,
     stochastic_size=30,
     deterministic_size=200,
     transition_hidden=200,
@@ -37,7 +42,7 @@ class AgentModel(nn.Module):
     self.action_size = np.prod(action_shape)
     self.action_shape = action_shape
 
-    self.encoder = EncoderModel(input_shape)
+    self.encoder = EncoderModel(input_shape, embedding_size)
     encoder_embed_size = self.encoder.embed_size
     self.decoder = DecoderModel(encoder_embed_size, input_shape)
     self.transition_model = TransitionModel(self.action_size, stochastic_size, deterministic_size, transition_hidden)
@@ -72,11 +77,10 @@ class AgentModel(nn.Module):
     encoded_obs = self.encoder(observation)
     
     if prev_action is None:
-      prev_action = torch.zeros((observation.shape[0], self.action_size), device=observation.device, dtype=observation.dtype)
+      prev_action = torch.zeros((observation.shape[0], self.action_size), device=observation.device, dtype=self.dtype)
     
     if prev_state is None:
-      prev_state = self.representation_model.initial_state(observation.shape[0], device=observation.device, dtype=observation.dtype)
-
+      prev_state = self.representation_model.initial_state(observation.shape[0], device=observation.device, dtype=self.dtype)
     _, state = self.representation_model(encoded_obs, prev_action, prev_state)
 
     return state
@@ -98,7 +102,7 @@ class AgentModel(nn.Module):
 
     if self.action_dist == "one_hot":
       action = action_dist.sample() # Sampling carries no gradient
-      action = action + action_dist.prob - action_dist.probs.detach() # Enables straight-through grads with auto-grad
+      action = action + action_dist.probs - action_dist.probs.detach() # Enables straight-through grads with auto-grad
     if self.action_dist == "tanh_normal":
       if self.training:
         action = action_dist.rsample()

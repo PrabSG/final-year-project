@@ -1,5 +1,3 @@
-from collections import namedtuple
-from turtle import forward
 from typing import List
 
 import torch
@@ -7,9 +5,10 @@ import torch.distributions as td
 import torch.nn as nn
 import torch.nn.functional as F
 
-from rlpyt.rlpyt.utils.buffer import buffer_method
+from rlpyt.utils.buffer import buffer_func, buffer_method
+from rlpyt.utils.collections import namedarraytuple
 
-RSSMState = namedtuple("RSSMState", ["mean", "std", "stoch", "det"])
+RSSMState = namedarraytuple("RSSMState", ["mean", "std", "stoch", "det"])
 
 def stack_states(rssm_states: List[RSSMState], dim: int):
   return RSSMState(
@@ -132,12 +131,13 @@ class RepresentationModel(nn.Module):
   
   def forward(self, encoded_obs: torch.Tensor, prev_action: torch.Tensor, prev_state: RSSMState):
     prior_state = self._transition_model(prev_action, prev_state) # (a_{t-1}, z_{t-1}, h_{t-1}) -> (z^_t, h_t)
-    x = torch.cat([prior_state.deter, encoded_obs], dim=-1) # (h_t, o_t)
+    x = torch.cat([prior_state.det, encoded_obs], dim=-1) # (h_t, o_t)
     mean, std = torch.chunk(self._stochastic_posterior_model(x), 2, dim=-1)
     std = F.softplus(std) + self._min_std
     dist = self._dist(mean, std)
     stoch_state = dist.rsample()
     posterior_state = RSSMState(mean, std, stoch_state, prior_state.det)
+    posterior_state = buffer_func(posterior_state, torch.squeeze)
     return prior_state, posterior_state
 
 

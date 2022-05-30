@@ -1,2 +1,1 @@
-from models.encoder import *
-from models.model import *
+from agents.adapt.models.model import *

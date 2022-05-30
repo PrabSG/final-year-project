@@ -1,21 +1,23 @@
 import itertools
+from typing import Iterable
 
-from rlpyt.rlpyt.agents.base import BaseAgent
-from rlpyt.rlpyt.algos.base import RlAlgorithm
-from rlpyt.rlpyt.replays.sequence.n_step import SamplesFromReplay
-from rlpyt.rlpyt.utils.buffer import buffer_method, buffer_to
-from rlpyt.rlpyt.utils.collections import namedarraytuple
-from rlpyt.rlpyt.utils.quick_args import save__init__args
-from rlpyt.rlpyt.utils.tensor import infer_leading_dims
+from rlpyt.agents.base import BaseAgent
+from rlpyt.algos.base import RlAlgorithm
+from rlpyt.replays.sequence.n_step import SamplesFromReplay
+from rlpyt.utils.buffer import buffer_method, buffer_to
+from rlpyt.utils.collections import namedarraytuple
+from rlpyt.utils.quick_args import save__init__args
+from rlpyt.utils.tensor import infer_leading_dims
 import torch
+import torch.nn as nn
 import torch.distributions as td
 from tqdm import tqdm
 
 from agents.adapt.replay import initialize_replay_buffer, samples_to_buffer
-from agents.adapt.utils import FreezeParameters
+from agents.adapt.utils import FreezeParameters, get_params
 
-loss_info_fields = ["model_loss", "actor_loss", "value_loss", "prior_entropy", "post_entropy", "divergence",
-                    "reward_loss", "image_loss"]
+loss_info_fields = ["model_loss", "actor_loss", "value_loss", "prior_entropy", "posterior_entropy", "divergence",
+                    "reward_loss", "obs_loss"]
 
 LossInfo = namedarraytuple("LossInfo", loss_info_fields)
 OptInfo = namedarraytuple("OptInfo",
@@ -26,9 +28,9 @@ class Dreamer(RlAlgorithm):
     self,
     batch_size=50,
     batch_length=50,
-    train_every=1000,
-    train_steps=100,
-    pretrain=100,
+    train_every=10,
+    train_steps=10,
+    pretrain=10,
     model_lr=6e-4,
     value_lr=8e-5,
     actor_lr=8e-5,
@@ -46,7 +48,7 @@ class Dreamer(RlAlgorithm):
     OptimCls=torch.optim.Adam,
     optim_kwargs=None,
     initial_optim_state_dict=None,
-    replay_sizr=int(5e6),
+    replay_size=int(5e6),
     replay_ratio=8,
     n_step_return=1,
     updates_per_sync=1,
@@ -54,7 +56,7 @@ class Dreamer(RlAlgorithm):
     kl_balancing=0.8,
     kl_scale=0.1,
     type=torch.float,
-    prefill=5000,
+    prefill=500,
     log_video=True,
     video_every=10,
     video_summary_t=25,
@@ -87,16 +89,16 @@ class Dreamer(RlAlgorithm):
       model.decoder,
       model.reward_model,
       model.representation_model,
-      model.transition_model
+      # model.transition_model # TODO(PrabSG@): Pytorch warns of duplicate parameters being passed as representation model uses transition model
     ]
 
     self.actor_modules = [model.action_model]
     self.value_modules = [model.value_model]
-    self.model_optimizer = torch.optim.Adam(itertools.chain(*self.model_modules), lr=self.model_lr,
+    self.model_optimizer = torch.optim.Adam(itertools.chain(*get_params(self.model_modules)), lr=self.model_lr,
                                             **self.optim_kwargs)
-    self.actor_optimizer = torch.optim.Adam(itertools.chain(*self.actor_modules), lr=self.actor_lr,
+    self.actor_optimizer = torch.optim.Adam(itertools.chain(*get_params(self.actor_modules)), lr=self.actor_lr,
                                             **self.optim_kwargs)
-    self.value_optimizer = torch.optim.Adam(itertools.chain(*self.value_modules), lr=self.value_lr,
+    self.value_optimizer = torch.optim.Adam(itertools.chain(*get_params(self.value_modules)), lr=self.value_lr,
                                             **self.optim_kwargs)
 
     if self.initial_optim_state_dict is not None:
@@ -119,13 +121,16 @@ class Dreamer(RlAlgorithm):
   def optimize_agent(self, itr, samples=None, sampler_itr=None):
     itr = itr if sampler_itr is None else sampler_itr
     if samples is not None:
-      self.replay_buffer.append(samples(samples_to_buffer(samples)))
+      self.replay_buffer.append_samples(samples_to_buffer(samples))
     
     opt_info = OptInfo(*([] for _ in range(len(OptInfo._fields))))
     if itr < self.prefill:
       return opt_info
+    print("Buffer cursor:", self.replay_buffer.t)
     if itr % self.train_every != 0:
+      print("train every")
       return opt_info
+    print("optimising")
     
     for i in tqdm(range(self.train_steps), desc="Optimisation via Imagination"):
       replay_samples = self.replay_buffer.sample_batch(self.batch_size, self.batch_length)
@@ -141,9 +146,9 @@ class Dreamer(RlAlgorithm):
       actor_loss.backward()
       value_loss.backward()
 
-      grad_clip_model = torch.nn.utils.clip_grad_norm_(itertools.chain(*self.model_modules), self.grad_clip)
-      grad_clip_actor = torch.nn.utils.clip_grad_norm_(itertools.chain(*self.actor_modules), self.grad_clip)
-      grad_clip_value = torch.nn.utils.clip_grad_norm_(itertools.chain(*self.value_modules), self.grad_clip)
+      grad_clip_model = torch.nn.utils.clip_grad_norm_(itertools.chain(*get_params(self.model_modules)), self.grad_clip)
+      grad_clip_actor = torch.nn.utils.clip_grad_norm_(itertools.chain(*get_params(self.actor_modules)), self.grad_clip)
+      grad_clip_value = torch.nn.utils.clip_grad_norm_(itertools.chain(*get_params(self.value_modules)), self.grad_clip)
 
       self.model_optimizer.step()
       self.actor_optimizer.step()
@@ -219,9 +224,26 @@ class Dreamer(RlAlgorithm):
       imag_reward = model.reward_model(imag_state).mean
       value = model.value_model(imag_state).mean
     returns = self.compute_return(imag_reward[:-1], value[:-1], self.discount, bootstrap=value[-1], lambda_=self.discount_lambda)
+    # TODO(PrabSG@): Look at predicting discount value due to early terminations in environment which modifies loss function
+    actor_loss = -torch.mean(returns)
 
+    # Value Loss
+    with torch.no_grad():
+      value_state = imag_state[:-1].detach()
+      target_return = returns.detach()
+    pred_value = model.value_model(value_state)
+    value_loss = -torch.mean(pred_value.log_prob(target_return))
 
-    
+    # Loss info
+    with torch.no_grad():
+      prior_entropy = torch.mean(td.Normal(priors.mean, priors.std).entropy())
+      posterior_entropy = torch.mean(td.Normal(posteriors.mean, posteriors.std).entropy())
+      loss_info = LossInfo(model_loss, actor_loss, value_loss, prior_entropy, posterior_entropy, kl_div, reward_loss, obs_loss)
+      
+      # TODO(PrabSG@): Optionally add visualisation code here
+    print(f"Model Loss: {model_loss}, Actor Loss: {actor_loss}, Value Loss: {value_loss}, KL Div: {kl_div}")
+
+    return model_loss, actor_loss, value_loss, loss_info
 
   def compute_return(self, imag_reward, pred_value, discount, bootstrap, lambda_):
     """Compute the discounted reward given a batch of imagined rewards and values."""
