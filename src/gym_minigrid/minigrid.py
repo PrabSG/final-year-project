@@ -144,6 +144,8 @@ class WorldObj:
             v = Goal()
         elif obj_type == 'lava':
             v = Lava()
+        elif obj_type == 'agent':
+            v = Agent()
         elif obj_type == 'water':
             v = Water()
         elif obj_type == 'glass':
@@ -372,6 +374,18 @@ class Glass(WorldObj):
         fill_coords(img, point_in_triangle((0.825,1), (1,1), (0,0.175)), lc)
         fill_coords(img, point_in_triangle((0,0), (1,1), (0.175,0)), lc)
         fill_coords(img, point_in_triangle((0,0.175), (1,1), (1,0.825)), lc)
+
+class Agent(WorldObj):
+    def __init__(self):
+        super().__init__('agent', 'red')
+    
+    def render(self, img):
+        c = (220, 0 , 0)
+        bg = (50, 50, 50)
+
+        fill_coords(img, point_in_rect(0, 1, 0, 1), bg)
+        fill_coords(img, point_in_line(0, 0, 1, 1, 0.1), c)
+        fill_coords(img, point_in_line(0, 1, 1, 0, 0.1), c)
 
 class Grid:
     """
@@ -1150,6 +1164,7 @@ class MiniGridEnv(gym.Env):
     def step(self, action):
         self.step_count += 1
 
+        self.no_change = False
         reward = self._reward(done=False)
         done = False
         info = {'violation': 0}
@@ -1174,6 +1189,8 @@ class MiniGridEnv(gym.Env):
         elif action == self.actions.forward:
             if fwd_cell == None or fwd_cell.can_overlap():
                 self.agent_pos = fwd_pos
+            else:
+                self.no_change = True
             if fwd_cell != None and fwd_cell.type == 'goal':
                 done = True
                 reward = self._reward(done=done)

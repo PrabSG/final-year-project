@@ -5,6 +5,8 @@ import numpy as np
 import torch
 import gym
 
+from gym_minigrid import minigrid
+
 def init_env(args):
   if args.env == "basic":
     return BasicEnv()
@@ -16,6 +18,8 @@ def init_env(args):
     return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingN1-v0", max_steps=args.max_episode_length)
   elif args.env == "unsafe-med":
     return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingN2-v0", max_steps=args.max_episode_length)
+  elif args.env == "twopath":
+    return MiniGridEnvWrapper("MiniGrid-TwoPathSimple-v0", max_steps=args.max_episode_length)
   else:
     raise ValueError(f"Environment Type '{args.env}' not defined.")
 
@@ -103,10 +107,12 @@ class MiniGridEnvWrapper(Environment):
     
     Optionally pass in raw environment observation to convert to correct format.
     """
+
     if obs is None:
-      obs = self._env.gen_obs()["image"].transpose(2, 0, 1)
-    else:
-      obs = obs["image"].transpose(2, 0, 1)
+      obs = self._env.gen_obs()
+
+    obs_type = "one_hot" if "one_hot" in obs else "image"
+    obs = obs[obs_type].transpose(2, 0, 1)
     return torch.tensor(obs, dtype=torch.float) if self.use_tensors else obs
   
   def step(self, action):
@@ -146,7 +152,43 @@ class MiniGridEnvWrapper(Environment):
   def state_size(self):
     """Return image state space shape as C x H x W."""
     img_shape = self._env.observation_space["image"].shape
-    return (img_shape[2], *img_shape[:2])
+    return (len(minigrid.IDX_TO_OBJECT), *img_shape[:2])
+
+  @staticmethod
+  def _obj_idx_to_default_encoding(type_idx):
+    obj_type = minigrid.IDX_TO_OBJECT[type_idx]
+
+    if obj_type == 'empty':
+        return (0, 0, 0)
+    elif obj_type == 'unseen':
+      return (1, 0, 0)
+
+    if obj_type == 'wall':
+        v = minigrid.Wall()
+    elif obj_type == 'floor':
+        v = minigrid.Floor()
+    elif obj_type == 'ball':
+        v = minigrid.Ball()
+    elif obj_type == 'key':
+        v = minigrid.Key()
+    elif obj_type == 'box':
+        v = minigrid.Box(color="purple")
+    elif obj_type == 'door':
+        v = minigrid.Door(color="blue")
+    elif obj_type == 'goal':
+        v = minigrid.Goal()
+    elif obj_type == 'lava':
+        v = minigrid.Lava()
+    elif obj_type == 'agent':
+        v = minigrid.Agent()
+    elif obj_type == 'water':
+        v = minigrid.Water()
+    elif obj_type == 'glass':
+        v = minigrid.Glass()
+    else:
+        assert False, "unknown object type in decode '%s'" % obj_type
+
+    return v.encode()
 
 
 class BasicEnv(Environment):

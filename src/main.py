@@ -13,12 +13,15 @@ from envs.env import init_env, BasicEnv, MiniGridEnvWrapper
 from utils import plot_training, visualise_agent
 
 AGENT_CHOICES = ["random", "ddqn", "ls-dreamer"]
-ENV_CHOICES = ["basic", "unsafe-simple", "unsafe-micro", "unsafe-small", "unsafe-med"]
+ENV_CHOICES = ["basic", "unsafe-simple", "unsafe-micro", "unsafe-small", "unsafe-med", "twopath"]
 MAX_EPISODE_LENGTH = 50
+SEED_EPISODES = 5
 NUM_TRAINING_EPISODES = 100
 NUM_TESTING_EPISODES = 10
+EPS_DECAY = 200000
 VISUALISATION_EPISODES = 5
 VISUALISATION_FREQUENCY = 25
+DEFAULT_RESULT_DIR = "../results/"
 
 ddqn_params = (1000, 256, [32, 32, 64], 0.001, 100, 0.9, 0.9, 0.05, 25)
 
@@ -33,8 +36,8 @@ def init_agent(agent_type, env, args):
     params = LSDreamerParams(
       args, args.results_dir, episodes=args.train_episodes, test=True, test_interval=25,
       test_episodes=5, max_episode_length=args.max_episode_length, embedding_size=256,
-      vis_freq=args.vis_freq, seed_episodes=15, planning_horizon=5, belief_size=200, state_size=30,
-      eps_decay=50000, worldmodel_LogProbLoss=True,
+      vis_freq=args.vis_freq, seed_episodes=args.seed_episodes, planning_horizon=5, belief_size=200,
+      state_size=30, eps_decay=args.eps_decay, worldmodel_LogProbLoss=True,
       device=device)
     return LatentShieldedDreamer(params, env)
   else:
@@ -56,9 +59,12 @@ if __name__ == "__main__":
   # Agent arguments
   parser.add_argument("--agent", default="random", choices=AGENT_CHOICES, help="Agent Type")
   parser.add_argument("--train-episodes", type=int, default=NUM_TRAINING_EPISODES, help="Number of episodes allocated for training the agent")
+  parser.add_argument("--seed-episodes", type=int, default=SEED_EPISODES)
+  parser.add_argument("--eps-decay", type=int, default=EPS_DECAY)
   parser.add_argument("--disable-cuda", action="store_true", help="Disable CUDA")
   # Script options
   parser.add_argument("--id", type=str, help="ID for results of run")
+  parser.add_argument("--results-dir", type=str, default=DEFAULT_RESULT_DIR, help="Path of folder to place logs and results from runs")
   parser.add_argument("--test-episodes", type=int, default=NUM_TESTING_EPISODES, help="Number of episodes to test the agent")
   parser.add_argument("--vis-eps", type=int, default=VISUALISATION_EPISODES, help="Number of episodes to visualise at each visualisation checkpoint")
   parser.add_argument("--vis-freq", type=int, default=VISUALISATION_FREQUENCY, help="Number of episodes between ")
@@ -70,7 +76,7 @@ if __name__ == "__main__":
   device = torch.device("cuda" if torch.cuda.is_available() and not args.disable_cuda else "cpu") # Configuring Pytorch
   print("Using device:", device)
 
-  results_dir = os.path.join('../results/', '{}_{}'.format(args.env, args.id))
+  results_dir = os.path.join(args.results_dir, '{}_{}'.format(args.env, args.id))
   os.makedirs(results_dir, exist_ok=True)
   args.results_dir = results_dir
 

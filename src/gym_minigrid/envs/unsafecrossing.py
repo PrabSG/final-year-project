@@ -1,3 +1,4 @@
+from gym_minigrid import minigrid
 from gym_minigrid.minigrid import *
 from gym_minigrid.register import register
 
@@ -80,8 +81,8 @@ class UnsafeCrossingEnv(MiniGridEnv):
         if not (j in gaps):
           self.put_obj(Wall(), i, j)
         
-      # safe_gap_idx = int(self._rand_bool())
-      safe_gap_idx = 0
+      safe_gap_idx = int(self._rand_bool())
+      # safe_gap_idx = 0
 
       if not self.no_safe_obstacle:
         self.put_obj(self.gap_objs[self._rand_elem(self.safe_gap_types)], i, gaps[abs(0 - safe_gap_idx)])
@@ -93,14 +94,44 @@ class UnsafeCrossingEnv(MiniGridEnv):
   
   def _reward(self, done=True, violation=False):
     """Override default reward function to penalise on each non-successful step."""
+    if violation:
+      return -40
     if done:
-      if violation:
-        return -0.5 / self.max_steps
-        # return - (0.5 * self.steps_remaining) / self.max_steps
-      else:
-        return 1
+      # return -0.5 / self.max_steps
+      # return - (0.5 * self.steps_remaining) / self.max_steps
+      return 100
+    elif self.no_change:
+      return -10
     else:
-      return -0.5 / self.max_steps
+      return -1
+      # return -0.5 / self.max_steps
+
+  def gen_obs(self):
+    obs = super().gen_obs()
+    one_hot_image = self._to_one_hot_obs(obs["image"])
+    obs["one_hot"] = one_hot_image
+    return obs
+
+  def _to_one_hot_obs(self, obs):
+    """
+    Take an observation in minigrid format of (H x W x 3) for the 3 WorldObj fields, and convert
+    into a one-hot encoding for a reduced set of objects with size (H x W x N) where N is the
+    number of distinct objects in the environment.
+    """
+
+    obs_shape = obs.shape
+    one_hot_obs = np.zeros((obs_shape[0], obs_shape[1], len(minigrid.IDX_TO_OBJECT)))
+
+    for i in range(obs_shape[0]):
+      for j in range(obs_shape[1]):
+        one_hot_obs[i, j] = self._obj_encoding_to_one_hot(obs[i, j])
+
+    return one_hot_obs
+
+  def _obj_encoding_to_one_hot(self, encoded_obj):
+    one_hot_obj = np.zeros((len(minigrid.IDX_TO_OBJECT)))
+    one_hot_obj[encoded_obj[0]] = 1
+    return one_hot_obj
 
 class UnsafeCrossingSimpleEnv(UnsafeCrossingEnv):
   def __init__(self, **kwargs):
