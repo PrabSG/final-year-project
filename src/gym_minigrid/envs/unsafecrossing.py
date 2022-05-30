@@ -1,3 +1,5 @@
+import gym
+
 from gym_minigrid.minigrid import *
 from gym_minigrid.register import register
 
@@ -45,6 +47,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
     self.no_safe_obstacle = no_safe_obstacle
     super().__init__(grid_size=grid_size, width=width, height=height, seed=seed, agent_view_size=agent_view_size, **kwargs)
     self.actions = UnsafeCrossingEnv.Actions
+    self.action_space = gym.spaces.Discrete(len(self.actions))
 
   def _gen_grid(self, width, height):
     assert self.num_crossings <= math.ceil((width - 4) / 2)

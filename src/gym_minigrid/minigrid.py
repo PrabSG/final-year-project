@@ -721,12 +721,12 @@ class MiniGridEnv(gym.Env):
         self.observation_space = spaces.Box(
             low=0,
             high=255,
-            shape=(self.agent_view_size, self.agent_view_size, 3),
+            shape=(3, self.agent_view_size, self.agent_view_size),
             dtype='uint8'
         )
-        self.observation_space = spaces.Dict({
-            'image': self.observation_space
-        })
+        # self.observation_space = spaces.Dict({
+        #     'image': self.observation_space
+        # })
 
         # Range of possible rewards
         self.reward_range = (0, 1)
@@ -1141,7 +1141,8 @@ class MiniGridEnv(gym.Env):
         vx, vy = coordinates
 
         obs = self.gen_obs()
-        obs_grid, _ = Grid.decode(obs['image'])
+        # obs_grid, _ = Grid.decode(obs['image'])
+        obs_grid, _ = Grid.decode(obs)
         obs_cell = obs_grid.get(vx, vy)
         world_cell = self.grid.get(x, y)
 
@@ -1264,13 +1265,14 @@ class MiniGridEnv(gym.Env):
         # - an image (partially observable view of the environment)
         # - the agent's direction/orientation (acting as a compass)
         # - a textual mission string (instructions for the agent)
-        obs = {
-            'image': image,
-            'direction': self.agent_dir,
-            'mission': self.mission
-        }
+        # obs = {
+        #     'image': image,
+            # 'direction': self.agent_dir,
+            # 'mission': self.mission
+        # }
 
-        return obs
+        # return obs
+        return image
 
     def get_obs_render(self, obs, tile_size=TILE_PIXELS//2):
         """
