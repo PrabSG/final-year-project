@@ -1,4 +1,4 @@
-from . import ltl_progression
+from safety import ltl_progression
 
 """
 This module contains the DFA abstraction used to progress co-safe LTL formulae given truth

@@ -1,8 +1,8 @@
+import collections
 from sympy import *
 from sympy.logic import simplify_logic
 from sympy.logic.boolalg import And, Or, Not
 import time
-import collections
 
 """
 Taken from: https://bitbucket.org/RToroIcarte/lpopl/src/master/src/ltl_progression.py
