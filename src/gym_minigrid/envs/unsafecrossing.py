@@ -92,19 +92,14 @@ class UnsafeCrossingEnv(MiniGridEnv):
       f"avoid the {self.obstacle_type} and get to the green goal square"
     )
   
-  def _reward(self, done=True, violation=False):
+  def _reward(self, done=True):
     """Override default reward function to penalise on each non-successful step."""
-    if violation:
-      return -40
     if done:
-      # return -0.5 / self.max_steps
-      # return - (0.5 * self.steps_remaining) / self.max_steps
-      return 100
+      return 1
     elif self.no_change:
-      return -10
+      return -0.1
     else:
-      return -1
-      # return -0.5 / self.max_steps
+      return -0.01
 
   def gen_obs(self):
     obs = super().gen_obs()
