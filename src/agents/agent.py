@@ -13,7 +13,7 @@ class Agent(ABC):
   def choose_action(self):
     pass
 
-  def run_tests(self, n_episodes, env, args, print_logging=True, visualise=False):
+  def run_tests(self, n_episodes, env, args, print_logging=False, visualise=False, episode=None):
     self.evaluate_mode()
 
     total_rewards = []
