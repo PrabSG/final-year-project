@@ -17,6 +17,48 @@ SAFETY_PROPS_TO_SYMBOLS = {
 }
 STANDING_STILL_LIMIT = 3
 
+LAVA_ONLY_SAFETY_SPECS = [
+  ("not", SAFETY_PROPS_TO_SYMBOLS["touching_lava"]),
+  ("not", SAFETY_PROPS_TO_SYMBOLS["standing_still"]),
+  (
+    "or",
+    ("not", SAFETY_PROPS_TO_SYMBOLS["standing_still"]),
+    ("not", SAFETY_PROPS_TO_SYMBOLS["touching_lava"])
+  )
+]
+
+OBSTACLE_SAFETY_SPECS = [
+  ("not", SAFETY_PROPS_TO_SYMBOLS["touching_lava"]),
+  ("not", SAFETY_PROPS_TO_SYMBOLS["touching_water"]),
+  ("not", SAFETY_PROPS_TO_SYMBOLS["touching_glass"]),
+  ("not", SAFETY_PROPS_TO_SYMBOLS["standing_still"]),
+  ("not", (
+    "or",
+    SAFETY_PROPS_TO_SYMBOLS["standing_still"],
+    SAFETY_PROPS_TO_SYMBOLS["touching_lava"])
+  ),
+  ("not", (
+    "or",
+    SAFETY_PROPS_TO_SYMBOLS["standing_still"],
+    SAFETY_PROPS_TO_SYMBOLS["touching_water"])
+  ),
+  ("not", (
+    "or",
+    SAFETY_PROPS_TO_SYMBOLS["standing_still"],
+    SAFETY_PROPS_TO_SYMBOLS["touching_glass"])
+  ),
+  ("not", (
+    "and",
+    SAFETY_PROPS_TO_SYMBOLS["standing_still"],
+    SAFETY_PROPS_TO_SYMBOLS["touching_water"])
+  ),
+  ("not", (
+    "and",
+    SAFETY_PROPS_TO_SYMBOLS["standing_still"],
+    SAFETY_PROPS_TO_SYMBOLS["touching_glass"])
+  )
+]
+
 class UnsafeCrossingEnv(MiniGridEnv):
   """
   Environment with gaps in walls to pass through to reach a goal whilst avoiding a random object.
