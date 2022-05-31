@@ -23,14 +23,14 @@ VISUALISATION_EPISODES = 5
 VISUALISATION_FREQUENCY = 25
 DEFAULT_RESULT_DIR = "../results/"
 
-ddqn_params = (1000, 256, [32, 32, 64], 0.001, 100, 0.9, 0.9, 0.05, 25)
+ddqn_params = (10000, 256, [64, 64, 128], 0.001, 100, 0.9, 0.9, 0.05, 25)
 
 
 def init_agent(agent_type, env, args):
   if agent_type == "random":
     return RandomAgent(env.state_size, env.action_size)
   elif agent_type == "ddqn":
-    params = DDQNParams(args.train_episodes, args.max_episode_length, *ddqn_params, encoding_size=32, cnn_channels=[8, 16, 16], cnn_kernels=[3, 3, 5], device=device)
+    params = DDQNParams(args.train_episodes, args.max_episode_length, *ddqn_params, encoding_size=64, cnn_channels=[16, 32, 64], cnn_kernels=[3, 3, 5], device=device)
     return DDQNAgent(env.state_size, env.action_size, params)
   elif agent_type == "ls-dreamer":
     params = LSDreamerParams(
@@ -63,7 +63,7 @@ if __name__ == "__main__":
   parser.add_argument("--eps-decay", type=int, default=EPS_DECAY)
   parser.add_argument("--disable-cuda", action="store_true", help="Disable CUDA")
   # Script options
-  parser.add_argument("--id", type=str, help="ID for results of run")
+  parser.add_argument("--id", type=str, required=True, help="ID for results of run")
   parser.add_argument("--results-dir", type=str, default=DEFAULT_RESULT_DIR, help="Path of folder to place logs and results from runs")
   parser.add_argument("--test-episodes", type=int, default=NUM_TESTING_EPISODES, help="Number of episodes to test the agent")
   parser.add_argument("--vis-eps", type=int, default=VISUALISATION_EPISODES, help="Number of episodes to visualise at each visualisation checkpoint")
