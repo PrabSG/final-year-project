@@ -166,6 +166,12 @@ class DDQNAgent(Agent):
       self._optimizer = torch.optim.Adam(self._policy_net.parameters(), lr=params.lr)
     
     self._exp_replay = ExperienceReplay(tuple_shape=TRANSITION_TUPLE_SIZE, buffer_size=params.buff_size)
+
+    self.metrics = {
+      "episode_rewards": [],
+      "train_losses": [],
+      "steps": []
+    }
   
   def _idx_to_one_hot(self, idx, max_idx):
     vec = torch.zeros((1, max_idx), device=self.params.device, dtype=torch.long)
@@ -260,11 +266,7 @@ class DDQNAgent(Agent):
     self.train_mode()
 
     optimize_steps = 0
-    metrics = {
-      "episode_rewards": [],
-      "train_losses": [],
-      "steps": []
-    }
+    
 
     for i_episode in range(self.params.episodes):
       if print_logging and (i_episode+1) % 5 == 0:
@@ -274,7 +276,7 @@ class DDQNAgent(Agent):
       total_reward = 0
       state = env.get_observation().unsqueeze(0).to(self.params.device)
 
-      metrics["train_losses"].append(0)
+      self.metrics["train_losses"].append(0)
 
       for t in range(self.params.max_episode_len):
         eps = self.params.eps_func(i_episode)
@@ -289,7 +291,7 @@ class DDQNAgent(Agent):
 
         loss = self._optimize_model()
         if loss is not None:
-          metrics["train_losses"][-1] += loss
+          self.metrics["train_losses"][-1] += loss
 
           optimize_steps += 1
           if optimize_steps % self.params.update_steps == 0:
@@ -299,8 +301,8 @@ class DDQNAgent(Agent):
           break
         state = next_state        
 
-      metrics["steps"].append(t+1 + (0 if len(metrics["steps"]) == 0 else metrics["steps"][-1]))
-      metrics["episode_rewards"].append(total_reward)
+      self.metrics["steps"].append(t+1 + (0 if len(self.metrics["steps"]) == 0 else self.metrics["steps"][-1]))
+      self.metrics["episode_rewards"].append(total_reward)
       
       if print_logging and (i_episode+1) % 5 == 0:
         print(f"Episode reward: {total_reward}")
@@ -310,7 +312,7 @@ class DDQNAgent(Agent):
         writer.add_scalar("q_loss", self.metrics["train_losses"][-1], self.metrics["steps"][-1])
     
     env.close()
-    return self.params.episodes, metrics["episode_rewards"], optimize_steps, metrics["train_losses"]
+    return self.params.episodes, self.metrics["episode_rewards"], optimize_steps, self.metrics["train_losses"]
 
   def train_mode(self):
     self._policy_net.train()
