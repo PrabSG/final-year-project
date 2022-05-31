@@ -118,7 +118,7 @@ class MiniGridEnvWrapper(Environment):
   def step(self, action):
     enum_action = self._one_hot_to_action_enum(action)
     obs, reward, done, info = self._env.step(enum_action)
-    self._is_done = done
+    self._is_done = self._is_done or done
     return self.get_observation(obs=obs), reward, done, info
   
   def is_complete(self):
@@ -133,6 +133,7 @@ class MiniGridEnvWrapper(Environment):
       self._env.seed(seed)
     
     self._env.reset()
+    self._is_done = False
     return self.get_observation()
 
   def close(self):
