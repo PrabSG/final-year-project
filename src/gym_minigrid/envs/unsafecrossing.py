@@ -4,6 +4,19 @@ from gym_minigrid.register import register
 
 DEF_MAX_EPISODE_LENGTH = 50
 
+# Reward Values
+GOAL_REWARD = 1
+NO_MOVE_REWARD = - 0.1
+DEFAULT_REWARD = -0.01
+
+SAFETY_PROPS_TO_SYMBOLS = {
+  "touching_lava": "a",
+  "touching_water": "b",
+  "touching_glass": "c",
+  "standing_still": "d"
+}
+STANDING_STILL_LIMIT = 3
+
 class UnsafeCrossingEnv(MiniGridEnv):
   """
   Environment with gaps in walls to pass through to reach a goal whilst avoiding a random object.
@@ -29,6 +42,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
     agent_view_size=7,
     random_crossing=True,
     no_safe_obstacle=False,
+    safety_spec="random",
     **kwargs
   ):
     self.num_crossings = num_crossings
@@ -44,6 +58,24 @@ class UnsafeCrossingEnv(MiniGridEnv):
     self.safe_gap_types = [obj_type for obj_type in self.gap_objs.keys() if not (obj_type in self.obstacle_types)]
     self.random_crossing = random_crossing
     self.no_safe_obstacle = no_safe_obstacle
+
+    # Environment propositions for building safety specifications
+    self._safety_props = {
+      "touching_lava": False, # The agent makes contact with a lava tile
+      "touching_water": False, # The agent makes contact with a water tile
+      "touching_glass": False, # The agent makes contact with a glass tile
+      "standing_still": False # The agent's position does not change for 3 consecutive actions
+    }
+    self._no_move_count = 0
+    # Safety specification for environment
+    if safety_spec == "random":
+      self.randomized_safety_spec = True
+      self._safety_spec = self._gen_random_safety_spec()
+    else:
+      self.randomized_safety_spec = False
+      self._safety_spec = safety_spec
+
+
     super().__init__(grid_size=grid_size, width=width, height=height, seed=seed, agent_view_size=agent_view_size, **kwargs)
     self.actions = UnsafeCrossingEnv.Actions
 
@@ -93,13 +125,26 @@ class UnsafeCrossingEnv(MiniGridEnv):
     )
   
   def _reward(self, done=True):
-    """Override default reward function to penalise on each non-successful step."""
+    """Override reward function to penalise on each non-successful step."""
     if done:
-      return 1
+      return GOAL_REWARD
     elif self.no_change:
-      return -0.1
+      return NO_MOVE_REWARD
     else:
-      return -0.01
+      return DEFAULT_REWARD
+
+  def step(self, action):
+    """Override step function to set environment propositions."""
+    obs, reward, done, info = super().step(action)
+    props = self._set_prop_values(reward, done)
+    info["true_props"] = self._extract_true_props(props)
+    return obs, reward, done, info
+
+  def reset(self):
+    """Override reset function to also handle randomly setting safety specficiations."""
+    if self.randomized_safety_spec:
+      self._safety_spec = self._gen_random_safety_spec()
+    return super().reset()
 
   def gen_obs(self):
     obs = super().gen_obs()
@@ -127,6 +172,37 @@ class UnsafeCrossingEnv(MiniGridEnv):
     one_hot_obj = np.zeros((len(minigrid.IDX_TO_OBJECT)))
     one_hot_obj[encoded_obj[0]] = 1
     return one_hot_obj
+
+  def _gen_random_safety_spec(self):
+    pass
+
+  def get_safety_spec(self):
+    return self._safety_spec
+  
+  def _set_prop_values(self, reward, done):
+    # Check touching_lava
+    # Entered non-goal terminating state, i.e. touched lava/obstacle
+    self._safety_props["touching_lava"] = done and reward != GOAL_REWARD
+
+    curr_grid_cell = self.grid.get(*self.agent_pos)
+
+    # Check touching water
+    self._safety_props["touching_water"] = curr_grid_cell.type == "water"
+
+    # Check touching glass
+    self._safety_props["touching_glass"] = curr_grid_cell.type == "glass"
+
+    # Check standing still
+    self._no_move_count = self._no_move_count + 1 if self.no_change else 0
+    self._safety_props["standing_still"] = self._no_move_count >= STANDING_STILL_LIMIT
+
+  def _extract_true_props(self):
+    true_props = set()
+    for prop, val in self._safety_props.items():
+      if val:
+        true_props.add(SAFETY_PROPS_TO_SYMBOLS[prop])
+    return true_props
+
 
 class UnsafeCrossingSimpleEnv(UnsafeCrossingEnv):
   def __init__(self, **kwargs):
