@@ -216,7 +216,8 @@ class UnsafeCrossingEnv(MiniGridEnv):
     return one_hot_obj
 
   def _gen_random_safety_spec(self):
-    pass
+    # TODO(PrabSG@): Change to use curriculum learning to cycle specifications
+    return self._rand_elem(LAVA_ONLY_SAFETY_SPECS)
 
   def get_safety_spec(self):
     return self._safety_spec
