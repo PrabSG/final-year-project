@@ -16,9 +16,12 @@ class SafetyConstrainedEnv(Environment, ABC):
   def get_violation_count(self) -> int:
     pass
 
+  def get_num_props(self) -> int:
+    pass
+
 
 class MiniGridSafetyEnv(SafetyConstrainedEnv):
-  def __init__(self, env_key, violation_penalty=-0.4, seed=None, use_tensors=True, **kwargs) -> None:
+  def __init__(self, env_key, violation_penalty=-1, seed=None, use_tensors=True, **kwargs) -> None:
     super().__init__()
     self.use_tensors = use_tensors
     self._env = gym.make(env_key, **kwargs)
@@ -166,3 +169,6 @@ class MiniGridSafetyEnv(SafetyConstrainedEnv):
 
   def get_violation_count(self) -> int:
     return self._safety_monitor.violation_count
+  
+  def get_num_props(self) -> int:
+    return len(self._env._safety_props) if hasattr(self._env, "_safety_props") else 0

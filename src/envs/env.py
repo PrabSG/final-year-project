@@ -4,6 +4,7 @@ import random
 import numpy as np
 import torch
 import gym
+from envs.safe_env import MiniGridSafetyEnv
 
 from gym_minigrid import minigrid
 
@@ -20,6 +21,8 @@ def init_env(args):
     return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingN2-v0", max_steps=args.max_episode_length)
   elif args.env == "twopath":
     return MiniGridEnvWrapper("MiniGrid-TwoPathSimple-v0", max_steps=args.max_episode_length)
+  elif args.env == "safety-simple":
+    return MiniGridSafetyEnv("MiniGrid-UnsafeCrossingSimple-v0", max_steps=args.max_episode_length)
   else:
     raise ValueError(f"Environment Type '{args.env}' not defined.")
 
