@@ -9,11 +9,12 @@ import gym_minigrid # Required import for env registration
 from agents.agent import RandomAgent
 from agents.ddqn import DDQNAgent, DDQNParams
 from agents.ls_dreamer import LSDreamerParams, LatentShieldedDreamer
-from envs.env import init_env, BasicEnv, MiniGridEnvWrapper
+from agents.safety_ddqn import SafetyDDQNAgent
+from envs.env import init_env
 from utils import plot_training, visualise_agent
 
-AGENT_CHOICES = ["random", "ddqn", "ls-dreamer"]
-ENV_CHOICES = ["basic", "unsafe-simple", "unsafe-micro", "unsafe-small", "unsafe-med", "twopath"]
+AGENT_CHOICES = ["random", "ddqn", "safety-ddqn" "ls-dreamer"]
+ENV_CHOICES = ["basic", "unsafe-simple", "unsafe-micro", "unsafe-small", "unsafe-med", "twopath", "safety-simple"]
 MAX_EPISODE_LENGTH = 50
 SEED_EPISODES = 5
 NUM_TRAINING_EPISODES = 100
@@ -32,6 +33,9 @@ def init_agent(agent_type, env, args):
   elif agent_type == "ddqn":
     params = DDQNParams(args.train_episodes, args.max_episode_length, *ddqn_params, encoding_size=64, cnn_channels=[16, 32, 64], cnn_kernels=[3, 3, 5], device=device)
     return DDQNAgent(env.state_size, env.action_size, params)
+  elif agent_type == "safety-ddqn":
+    params = DDQNParams(args.train_episodes, args.max_episode_length, *ddqn_params, encoding_size=64, cnn_channels=[16, 32, 64], cnn_kernels=[3, 3, 5], device=device)
+    return SafetyDDQNAgent(env.state_size, env.action_size, params)
   elif agent_type == "ls-dreamer":
     params = LSDreamerParams(
       args, args.results_dir, episodes=args.train_episodes, test=True, test_interval=25,
