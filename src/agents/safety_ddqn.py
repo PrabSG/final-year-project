@@ -234,10 +234,12 @@ class SafetyDDQNAgent(Agent):
 
   def train_mode(self):
     self._policy_net.train()
+    self._spec_encoder.train()
     if self.multi_dim_input:
       self._policy_net_encoder.train()
 
   def evaluate_mode(self):
     self._policy_net.eval()
+    self._spec_encoder.eval()
     if self.multi_dim_input:
       self._policy_net_encoder.eval()
