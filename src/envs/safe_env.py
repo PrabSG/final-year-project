@@ -10,6 +10,7 @@ from gym_minigrid import minigrid
 from safety.monitor import SafetyMonitor
 
 class SafetyConstrainedEnv(Environment, ABC):
+
   def get_safety_spec(self):
     pass
 
@@ -102,6 +103,7 @@ class MiniGridSafetyEnv(SafetyConstrainedEnv):
       self._env.seed(seed)
     
     self._env.reset()
+    self._is_done = False
 
     # Reset safety monitor with potentially new safety specification
     self._safety_monitor = SafetyMonitor(
@@ -172,4 +174,4 @@ class MiniGridSafetyEnv(SafetyConstrainedEnv):
     return self._safety_monitor.violation_count
   
   def get_num_props(self) -> int:
-    return len(self._env._safety_props) if hasattr(self._env, "_safety_props") else 0
+    return len(self._env.safety_props) if hasattr(self._env, "safety_props") else 0

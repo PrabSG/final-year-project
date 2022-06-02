@@ -1,3 +1,4 @@
+from typing import Dict
 from gym_minigrid import minigrid
 from gym_minigrid.minigrid import *
 from gym_minigrid.register import register
@@ -95,12 +96,11 @@ class UnsafeCrossingEnv(MiniGridEnv):
         self.obstacle_objs["lava"] = Lava()
       else:
         self.obstacle_objs[t] = self.gap_objs[t]
-      
 
     self.safe_gap_types = [obj_type for obj_type in self.gap_objs.keys() if not (obj_type in self.obstacle_types)]
     self.random_crossing = random_crossing
     self.no_safe_obstacle = no_safe_obstacle
-
+    
     # Environment propositions for building safety specifications
     self._safety_props = {
       "touching_lava": False, # The agent makes contact with a lava tile
@@ -109,16 +109,16 @@ class UnsafeCrossingEnv(MiniGridEnv):
       "standing_still": False # The agent's position does not change for 3 consecutive actions
     }
     self._no_move_count = 0
-    # Safety specification for environment
-    if safety_spec == "random":
-      self.randomized_safety_spec = True
-      self._safety_spec = self._gen_random_safety_spec()
-    else:
-      self.randomized_safety_spec = False
-      self._safety_spec = safety_spec
-
+    self.randomized_safety_spec = safety_spec == "random"
 
     super().__init__(grid_size=grid_size, width=width, height=height, seed=seed, agent_view_size=agent_view_size, **kwargs)
+    
+    # Safety specification for environment
+    if self.randomized_safety_spec:
+      self._safety_spec = self._gen_random_safety_spec()
+    else:
+      self._safety_spec = safety_spec
+
     self.actions = UnsafeCrossingEnv.Actions
 
   def _gen_grid(self, width, height):
@@ -228,20 +228,26 @@ class UnsafeCrossingEnv(MiniGridEnv):
     self._safety_props["touching_lava"] = done and reward != GOAL_REWARD
 
     curr_grid_cell = self.grid.get(*self.agent_pos)
+    if curr_grid_cell != None:
+      # Check touching water
+      self._safety_props["touching_water"] = curr_grid_cell.type == "water"
 
-    # Check touching water
-    self._safety_props["touching_water"] = curr_grid_cell.type == "water"
-
-    # Check touching glass
-    self._safety_props["touching_glass"] = curr_grid_cell.type == "glass"
+      # Check touching glass
+      self._safety_props["touching_glass"] = curr_grid_cell.type == "glass"
 
     # Check standing still
     self._no_move_count = self._no_move_count + 1 if self.no_change else 0
     self._safety_props["standing_still"] = self._no_move_count >= STANDING_STILL_LIMIT
+    
+    return self.safety_props
 
-  def _extract_true_props(self):
+  @property
+  def safety_props(self):
+    return self._safety_props
+
+  def _extract_true_props(self, props: Dict[str, bool]):
     true_props = set()
-    for prop, val in self._safety_props.items():
+    for prop, val in props.items():
       if val:
         true_props.add(SAFETY_PROPS_TO_SYMBOLS[prop])
     return true_props

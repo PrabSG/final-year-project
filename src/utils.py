@@ -4,6 +4,9 @@ from array2gif import write_gif
 import matplotlib.pyplot as plt
 import numpy as np
 
+from envs.env import BasicEnv, MiniGridEnvWrapper
+from envs.safe_env import MiniGridSafetyEnv
+
 class DimensionError(IndexError):
   def __init__(self, expected, given, *args: object) -> None:
     self.message = f"Invalid dimensions. Expected {expected}, given {given}"
@@ -15,6 +18,24 @@ def exp_decay_epsilon(eps_start, eps_end, eps_decay):
         math.exp(-1. * episode_num / eps_decay)
 
   return exp_eps_func
+
+def init_env(args):
+  if args.env == "basic":
+    return BasicEnv()
+  elif args.env == "unsafe-simple":
+    return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingSimple-v0", seed=args.seed, max_steps=args.max_episode_length)
+  elif args.env == "unsafe-micro":
+    return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingMicro-v0", seed=args.seed, max_steps=args.max_episode_length)
+  elif args.env == "unsafe-small":
+    return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingN1-v0", seed=args.seed, max_steps=args.max_episode_length)
+  elif args.env == "unsafe-med":
+    return MiniGridEnvWrapper("MiniGrid-UnsafeCrossingN2-v0", seed=args.seed, max_steps=args.max_episode_length)
+  elif args.env == "twopath":
+    return MiniGridEnvWrapper("MiniGrid-TwoPathSimple-v0", seed=args.seed, max_steps=args.max_episode_length)
+  elif args.env == "safety-simple":
+    return MiniGridSafetyEnv("MiniGrid-UnsafeCrossingSimple-v0", seed=args.seed, max_steps=args.max_episode_length)
+  else:
+    raise ValueError(f"Environment Type '{args.env}' not defined.")
 
 def plot_training(n_episodes, episode_rs, n_steps, train_losses, filename):
   fig, axs = plt.subplots(2, figsize=(8, 6))

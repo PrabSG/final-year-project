@@ -6,7 +6,7 @@ Imagination-Based Agents' by Peter He."""
 import numpy as np
 import torch
 
-from envs.env import init_env
+from utils import init_env
 
 # Preprocesses an observation inplace (from float32 Tensor [0, 255] to [-0.5, 0.5])
 def preprocess_observation_(observation, bit_depth):

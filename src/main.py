@@ -4,16 +4,17 @@ import os
 import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
+from envs.safe_env import SafetyConstrainedEnv
 
 import gym_minigrid # Required import for env registration
 from agents.agent import RandomAgent
 from agents.ddqn import DDQNAgent, DDQNParams
 from agents.ls_dreamer import LSDreamerParams, LatentShieldedDreamer
-from agents.safety_ddqn import SafetyDDQNAgent
-from envs.env import init_env
-from utils import plot_training, visualise_agent
+from agents.safety_ddqn import SafetyDDQNAgent, SafetyDDQNParams
+from safety.utils import get_encoding_size
+from utils import visualise_agent, init_env
 
-AGENT_CHOICES = ["random", "ddqn", "safety-ddqn" "ls-dreamer"]
+AGENT_CHOICES = ["random", "ddqn", "safety-ddqn", "ls-dreamer"]
 ENV_CHOICES = ["basic", "unsafe-simple", "unsafe-micro", "unsafe-small", "unsafe-med", "twopath", "safety-simple"]
 MAX_EPISODE_LENGTH = 50
 SEED_EPISODES = 5
@@ -34,8 +35,9 @@ def init_agent(agent_type, env, args):
     params = DDQNParams(args.train_episodes, args.max_episode_length, *ddqn_params, encoding_size=64, cnn_channels=[16, 32, 64], cnn_kernels=[3, 3, 5], device=device)
     return DDQNAgent(env.state_size, env.action_size, params)
   elif agent_type == "safety-ddqn":
-    params = DDQNParams(args.train_episodes, args.max_episode_length, *ddqn_params, encoding_size=64, cnn_channels=[16, 32, 64], cnn_kernels=[3, 3, 5], device=device)
-    return SafetyDDQNAgent(env.state_size, env.action_size, params)
+    params = SafetyDDQNParams(args.train_episodes, args.max_episode_length, *ddqn_params, encoding_size=64, cnn_channels=[16, 32, 64], cnn_kernels=[3, 3, 5], device=device)
+    num_props = env.get_num_props() if isinstance(env, SafetyConstrainedEnv) else 0
+    return SafetyDDQNAgent(env.state_size, env.action_size, get_encoding_size(num_props), params)
   elif agent_type == "ls-dreamer":
     params = LSDreamerParams(
       args, args.results_dir, episodes=args.train_episodes, test=True, test_interval=25,
@@ -60,6 +62,7 @@ if __name__ == "__main__":
   # Environment arguments
   parser.add_argument("--env", default="basic", choices=ENV_CHOICES, help="Environment Type")
   parser.add_argument("--max-episode-length", type=int, default=MAX_EPISODE_LENGTH, help="Maximum number of steps per episode")
+  parser.add_argument("--seed", type=int, default=1337, help="Seed used to initialise randomness in environment")
   # Agent arguments
   parser.add_argument("--agent", default="random", choices=AGENT_CHOICES, help="Agent Type")
   parser.add_argument("--train-episodes", type=int, default=NUM_TRAINING_EPISODES, help="Number of episodes allocated for training the agent")
@@ -71,7 +74,7 @@ if __name__ == "__main__":
   parser.add_argument("--results-dir", type=str, default=DEFAULT_RESULT_DIR, help="Path of folder to place logs and results from runs")
   parser.add_argument("--test-episodes", type=int, default=NUM_TESTING_EPISODES, help="Number of episodes to test the agent")
   parser.add_argument("--vis-eps", type=int, default=VISUALISATION_EPISODES, help="Number of episodes to visualise at each visualisation checkpoint")
-  parser.add_argument("--vis-freq", type=int, default=VISUALISATION_FREQUENCY, help="Number of episodes between ")
+  parser.add_argument("--vis-freq", type=int, default=VISUALISATION_FREQUENCY, help="Number of episodes between visualisation checkpoints")
 
   args = parser.parse_args()
 
