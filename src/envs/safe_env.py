@@ -30,7 +30,7 @@ class MiniGridSafetyEnv(SafetyConstrainedEnv):
     self._safety_monitor = SafetyMonitor(
       self._env.get_safety_spec() if hasattr(self._env, "get_safety_spec")
       else "True")
-    self.violation_penalty = 0
+    self.violation_penalty = violation_penalty
 
   def __str__(self) -> str:
     return self._env.__str__()
@@ -81,8 +81,9 @@ class MiniGridSafetyEnv(SafetyConstrainedEnv):
     obs, reward, done, info = self._env.step(enum_action)
 
     # Check safety specifications are still satisfied
-    violation = self._safety_monitor.step(info["true_props"] if "true_props" in info else set())
+    violation, prog_formula = self._safety_monitor.step(info["true_props"] if "true_props" in info else set())
     info["violation"] = violation
+    info["prog_formula"] = prog_formula
     if violation:
       reward += self.violation_penalty
 

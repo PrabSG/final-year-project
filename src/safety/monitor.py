@@ -16,11 +16,11 @@ class SafetyMonitor:
     elif progression == 'False':
       # Violated specification
       self._violation_count += 1
-      return True
+      return True, ()
     else:
       self._current_formula = progression
     
-    return False
+    return False, self._current_formula
   
   def get_safety_spec(self):
     return self._dfa.formula
