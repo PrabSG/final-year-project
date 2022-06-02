@@ -43,7 +43,7 @@ def _prop_mapping(prop: str):
   return ord(prop) - ord("a")
 
 def get_one_hot_spec(safety_spec: List[str], num_props: int) -> torch.Tensor:
-  vocab_size = num_props + len(UNARY_OPERATORS) + len(BINARY_OPERATORS) + len(MISC_SYMBOLS)
+  vocab_size = get_encoding_size(num_props)
   one_hot_encoding = torch.zeros((len(safety_spec), vocab_size), dtype=torch.float)
 
   for i, word in enumerate(safety_spec):
@@ -56,6 +56,9 @@ def get_one_hot_spec(safety_spec: List[str], num_props: int) -> torch.Tensor:
       one_hot_encoding[i][prop_encoding] = 1
 
   return one_hot_encoding
+
+def get_encoding_size(num_props: int) -> int:
+  return num_props + len(UNARY_OPERATORS) + len(BINARY_OPERATORS) + len(MISC_SYMBOLS)
 
 if __name__ == "__main__":
   ex_spec = (
