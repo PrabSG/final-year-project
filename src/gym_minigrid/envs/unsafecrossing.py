@@ -1,7 +1,9 @@
+import re
 from typing import Dict
 from gym_minigrid import minigrid
 from gym_minigrid.minigrid import *
 from gym_minigrid.register import register
+from safety.condition import AvoidRequirement, SafetyRequirement, UntilRequirement
 
 DEF_MAX_EPISODE_LENGTH = 50
 
@@ -14,58 +16,29 @@ SAFETY_PROPS_TO_SYMBOLS = {
   "touching_lava": "a",
   "touching_water": "b",
   "touching_glass": "c",
-  "standing_still": "d"
+  "standing_still": "d",
+  "reach_goal": "e"
 }
 STANDING_STILL_LIMIT = 3
-
-LAVA_ONLY_SAFETY_SPECS = [
-  ("not", SAFETY_PROPS_TO_SYMBOLS["touching_lava"]),
-  ("not", SAFETY_PROPS_TO_SYMBOLS["standing_still"]),
-  (
-    "or",
-    ("not", SAFETY_PROPS_TO_SYMBOLS["standing_still"]),
-    ("not", SAFETY_PROPS_TO_SYMBOLS["touching_lava"])
-  )
-]
-
-OBSTACLE_SAFETY_SPECS = [
-  ("not", SAFETY_PROPS_TO_SYMBOLS["touching_lava"]),
-  ("not", SAFETY_PROPS_TO_SYMBOLS["touching_water"]),
-  ("not", SAFETY_PROPS_TO_SYMBOLS["touching_glass"]),
-  ("not", SAFETY_PROPS_TO_SYMBOLS["standing_still"]),
-  ("not", (
-    "or",
-    SAFETY_PROPS_TO_SYMBOLS["standing_still"],
-    SAFETY_PROPS_TO_SYMBOLS["touching_lava"])
-  ),
-  ("not", (
-    "or",
-    SAFETY_PROPS_TO_SYMBOLS["standing_still"],
-    SAFETY_PROPS_TO_SYMBOLS["touching_water"])
-  ),
-  ("not", (
-    "or",
-    SAFETY_PROPS_TO_SYMBOLS["standing_still"],
-    SAFETY_PROPS_TO_SYMBOLS["touching_glass"])
-  ),
-  ("not", (
-    "and",
-    SAFETY_PROPS_TO_SYMBOLS["standing_still"],
-    SAFETY_PROPS_TO_SYMBOLS["touching_water"])
-  ),
-  ("not", (
-    "and",
-    SAFETY_PROPS_TO_SYMBOLS["standing_still"],
-    SAFETY_PROPS_TO_SYMBOLS["touching_glass"])
-  )
-]
 
 class UnsafeCrossingEnv(MiniGridEnv):
   """
   Environment with gaps in walls to pass through to reach a goal whilst avoiding a random object.
   """
 
-  gap_objs = {"floor": Floor(), "door": Door(color="green", is_open=True), "water": Water(), "glass": Glass()}
+  gap_objs = {"lava": Lava(), "floor": Floor(), "water": Water(), "glass": Glass()}
+  
+  # Specifiable Safety requirements for UnsafeCrossingEnv
+  touch_water = SafetyRequirement(SAFETY_PROPS_TO_SYMBOLS["touching_water"], req_objs=["water"])
+  avoid_lava = AvoidRequirement(SAFETY_PROPS_TO_SYMBOLS["touching_lava"], avoid_objs=["lava"])
+  avoid_glass = AvoidRequirement(SAFETY_PROPS_TO_SYMBOLS["touching_glass"], avoid_objs=["glass"])
+  avoid_water = AvoidRequirement(SAFETY_PROPS_TO_SYMBOLS["touching_water"], avoid_objs=["water"])
+  avoid_standing_still = AvoidRequirement(SAFETY_PROPS_TO_SYMBOLS["standing_still"])
+  avoid_standing_glass = AvoidRequirement(("and", SAFETY_PROPS_TO_SYMBOLS["touching_glass"], SAFETY_PROPS_TO_SYMBOLS["standing_still"]), ["glass"])
+  avoid_specs = [avoid_lava, avoid_glass, avoid_water, avoid_standing_still, avoid_standing_glass]
+
+  # Example safety specs
+  no_glass_until_water = UntilRequirement(avoid_glass, touch_water)
 
   # Override set of possible actions
   class Actions(IntEnum):
@@ -89,6 +62,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
     **kwargs
   ):
     self.num_crossings = num_crossings
+    self.obstacle_type = None
     self.obstacle_types = obstacle_types
     self.obstacle_objs = {}
     for t in obstacle_types:
@@ -97,7 +71,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
       else:
         self.obstacle_objs[t] = self.gap_objs[t]
 
-    self.safe_gap_types = [obj_type for obj_type in self.gap_objs.keys() if not (obj_type in self.obstacle_types)]
+    self.safe_gap_types = set([obj_type for obj_type in self.gap_objs.keys() if not (obj_type in self.obstacle_types)])
     self.random_crossing = random_crossing
     self.no_safe_obstacle = no_safe_obstacle
     
@@ -106,18 +80,22 @@ class UnsafeCrossingEnv(MiniGridEnv):
       "touching_lava": False, # The agent makes contact with a lava tile
       "touching_water": False, # The agent makes contact with a water tile
       "touching_glass": False, # The agent makes contact with a glass tile
-      "standing_still": False # The agent's position does not change for 3 consecutive actions
+      "standing_still": False, # The agent's position does not change for 3 consecutive actions
+      "reach_goal": False # The agent reaches the goal position
     }
     self._no_move_count = 0
     self.randomized_safety_spec = safety_spec == "random"
 
-    super().__init__(grid_size=grid_size, width=width, height=height, seed=seed, agent_view_size=agent_view_size, **kwargs)
-    
+    # Have to set seed here to use random functions
+    self.seed(seed=seed)
+
     # Safety specification for environment
     if self.randomized_safety_spec:
-      self._safety_spec = self._gen_random_safety_spec()
+      self._safety_spec, self._avoid_objs, self._req_objs = self._gen_random_safety_spec()
     else:
-      self._safety_spec = safety_spec
+      self._safety_spec, self._avoid_objs, self._req_objs = safety_spec, set(self.obstacle_types), set()
+
+    super().__init__(grid_size=grid_size, width=width, height=height, seed=seed, agent_view_size=agent_view_size, **kwargs)    
 
     self.actions = UnsafeCrossingEnv.Actions
 
@@ -127,7 +105,10 @@ class UnsafeCrossingEnv(MiniGridEnv):
     assert width % 2 == 1 and height % 2 == 1
 
     # Pick an obstacle type for this grid
-    self.obstacle_type = self._rand_elem(self.obstacle_types)
+    obstacle_types = self._avoid_objs
+
+    # Determine gap objects
+    gap_types = self._req_objs if len(self._req_objs) > 0 else self.safe_gap_types
 
     self.grid = Grid(width, height)
 
@@ -156,14 +137,13 @@ class UnsafeCrossingEnv(MiniGridEnv):
           self.put_obj(Wall(), i, j)
         
       safe_gap_idx = int(self._rand_bool())
-      # safe_gap_idx = 0
 
       if not self.no_safe_obstacle:
-        self.put_obj(self.gap_objs[self._rand_elem(self.safe_gap_types)], i, gaps[abs(0 - safe_gap_idx)])
-      self.put_obj(self.obstacle_objs[self.obstacle_type], i, gaps[abs(1 - safe_gap_idx)])
+        self.put_obj(self.gap_objs[self._rand_elem(gap_types)], i, gaps[abs(0 - safe_gap_idx)])
+      self.put_obj(self.gap_objs[self._rand_elem(obstacle_types)], i, gaps[abs(1 - safe_gap_idx)])
 
     self.mission = (
-      f"avoid the {self.obstacle_type} and get to the green goal square"
+      f"avoid the lava and get to the green goal square. Safety Constraint: {self._safety_spec}"
     )
   
   def _reward(self, done=True):
@@ -185,7 +165,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
   def reset(self):
     """Override reset function to also handle randomly setting safety specficiations."""
     if self.randomized_safety_spec:
-      self._safety_spec = self._gen_random_safety_spec()
+      self._safety_spec, self._avoid_objs, self._req_objs = self._gen_random_safety_spec()
     return super().reset()
 
   def gen_obs(self):
@@ -217,7 +197,28 @@ class UnsafeCrossingEnv(MiniGridEnv):
 
   def _gen_random_safety_spec(self):
     # TODO(PrabSG@): Change to use curriculum learning to cycle specifications
-    return self._rand_elem(LAVA_ONLY_SAFETY_SPECS)
+    formula = ""
+    to_avoid = set(["lava"])
+    required = set()
+    spec_configs = ["one_avoid", "two_avoid", "cond_avoid"]
+    config = self._rand_elem(spec_configs)
+    if config == "one_avoid":
+      avoid = self._rand_elem(self.avoid_specs)
+      formula = ("until", avoid.get_formula(), SAFETY_PROPS_TO_SYMBOLS["reach_goal"])
+      to_avoid = to_avoid.union(avoid.get_avoid_objs())
+      required = required.union(avoid.get_req_objs())
+    if config == "two_avoid":
+      avoid1, avoid2 = self._rand_subset(self.avoid_specs, 2)
+      formula = ("until", ("and", avoid1.get_formula(), avoid2.get_formula()), SAFETY_PROPS_TO_SYMBOLS["reach_goal"])
+      to_avoid = to_avoid.union(avoid1.get_avoid_objs().union(avoid2.get_avoid_objs()))
+      required = required.union(avoid1.get_req_objs().union(avoid2.get_req_objs()))
+    elif config == "cond_avoid":
+      avoid = self.no_glass_until_water
+      formula = avoid.get_formula()
+      to_avoid = avoid.get_avoid_objs()
+      required = avoid.get_req_objs()
+
+    return formula, to_avoid, required
 
   def get_safety_spec(self):
     return self._safety_spec
@@ -226,6 +227,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
     # Check touching_lava
     # Entered non-goal terminating state, i.e. touched lava/obstacle
     self._safety_props["touching_lava"] = done and reward != GOAL_REWARD
+    self._safety_props["reach_goal"] = done and reward == GOAL_REWARD
 
     curr_grid_cell = self.grid.get(*self.agent_pos)
     if curr_grid_cell != None:
@@ -234,6 +236,9 @@ class UnsafeCrossingEnv(MiniGridEnv):
 
       # Check touching glass
       self._safety_props["touching_glass"] = curr_grid_cell.type == "glass"
+    else:
+      self._safety_props["touching_water"] = False
+      self._safety_props["touching_glass"] = False
 
     # Check standing still
     self._no_move_count = self._no_move_count + 1 if self.no_change else 0
