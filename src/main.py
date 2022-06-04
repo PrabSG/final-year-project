@@ -15,7 +15,7 @@ from safety.utils import get_encoding_size
 from utils import visualise_agent, init_env
 
 AGENT_CHOICES = ["random", "ddqn", "safety-ddqn", "ls-dreamer"]
-ENV_CHOICES = ["basic", "unsafe-simple", "unsafe-micro", "unsafe-small", "unsafe-med", "twopath", "safety-simple"]
+ENV_CHOICES = ["basic", "unsafe-simple", "unsafe-micro", "unsafe-small", "unsafe-med", "twopath", "safety-micro"]
 MAX_EPISODE_LENGTH = 50
 SEED_EPISODES = 5
 NUM_TRAINING_EPISODES = 100
