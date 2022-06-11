@@ -1,5 +1,6 @@
 import argparse
 import os
+import pickle
 
 import numpy as np
 import torch
@@ -18,6 +19,7 @@ AGENT_CHOICES = ["random", "ddqn", "safety-ddqn", "ls-dreamer"]
 ENV_CHOICES = ["basic", "unsafe-simple", "unsafe-micro", "unsafe-small", "unsafe-med", "twopath", "safety-micro"]
 MAX_EPISODE_LENGTH = 50
 SEED_EPISODES = 5
+CURRICULUM_EQ_EPS = 100
 NUM_TRAINING_EPISODES = 100
 NUM_TESTING_EPISODES = 10
 EPS_DECAY = 200000
@@ -63,6 +65,7 @@ if __name__ == "__main__":
   parser.add_argument("--env", default="basic", choices=ENV_CHOICES, help="Environment Type")
   parser.add_argument("--max-episode-length", type=int, default=MAX_EPISODE_LENGTH, help="Maximum number of steps per episode")
   parser.add_argument("--seed", type=int, default=1337, help="Seed used to initialise randomness in environment")
+  parser.add_argument("--curriculum-eq-eps", type=int, default=CURRICULUM_EQ_EPS, help="Number of episodes before safety specifications are equally weighted for curriculum learning")
   # Agent arguments
   parser.add_argument("--agent", default="random", choices=AGENT_CHOICES, help="Agent Type")
   parser.add_argument("--train-episodes", type=int, default=NUM_TRAINING_EPISODES, help="Number of episodes allocated for training the agent")
@@ -75,6 +78,10 @@ if __name__ == "__main__":
   parser.add_argument("--test-episodes", type=int, default=NUM_TESTING_EPISODES, help="Number of episodes to test the agent")
   parser.add_argument("--vis-eps", type=int, default=VISUALISATION_EPISODES, help="Number of episodes to visualise at each visualisation checkpoint")
   parser.add_argument("--vis-freq", type=int, default=VISUALISATION_FREQUENCY, help="Number of episodes between visualisation checkpoints")
+  # Plotting options
+  parser.add_argument("--plot", action="store_true", help="Plot results into a pgf")
+  parser.add_argument("--num-agents", type=int, default=1, help="Number of agents to train for plotting")
+  parser.add_argument("--save-metrics", action="store_true", help="Save metrics to a pickled file")
 
   args = parser.parse_args()
 
@@ -87,14 +94,31 @@ if __name__ == "__main__":
   os.makedirs(results_dir, exist_ok=True)
   args.results_dir = results_dir
 
-  summary_name = results_dir + "/{}_{}_log"
-  writer = SummaryWriter(summary_name.format(args.env, args.id))
-  args.writer = writer
+  if args.plot:
+    agent_metrics = []
+    for n in range(args.num_agents):
+      summary_name = results_dir + "/{}_{}_{}_log"
+      args.writer = SummaryWriter(summary_name.format(args.env, args.id, n))
+      env, agent = initialise(args)
+      
+      print(f"Training Agent {n+1}...")
+      metrics = train_agent(env, agent, args)
+      agent_metrics.append(metrics)
 
-  # Start running agent
-  env, agent = initialise(args)
-  train_agent(env, agent, args)
-  # n_episodes, episode_rs, n_steps, train_losses = train_agent(env, agent, args)
-  # plot_training(n_episodes, episode_rs, n_steps, train_losses, results_dir + "/train_plots")
-  agent.run_tests(args.test_episodes, env, args, print_logging=True)
-  visualise_agent(env, agent, args)
+    if args.save_metrics:
+      with open(args.results_dir + f"/metrics_{args.num_agents}_agents", "wb") as f:
+        pickle.dump(agent_metrics, f)
+    # TODO(PrabSG@): Write plotting function
+  else:
+    summary_name = results_dir + "/{}_{}_log"
+    writer = SummaryWriter(summary_name.format(args.env, args.id))
+    args.writer = writer
+
+    # Start running agent
+    env, agent = initialise(args)
+    print("Training Agent...")
+    train_agent(env, agent, args)
+    # n_episodes, episode_rs, n_steps, train_losses = train_agent(env, agent, args)
+    # plot_training(n_episodes, episode_rs, n_steps, train_losses, results_dir + "/train_plots")
+    # agent.run_tests(args.test_episodes, env, args)
+    visualise_agent(env, agent, args)
