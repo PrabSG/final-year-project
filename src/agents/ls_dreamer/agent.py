@@ -591,7 +591,6 @@ class LatentShieldedDreamer(Agent):
 
     return obs_frames, prior_frames, pred_frames
 
-
   def run_tests(self, n_episodes, env, args, print_logging=False, visualise=False, episode=None):
     # If running tests at no particular episode, run 'after' all training episodes
     if episode is None:

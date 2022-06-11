@@ -193,7 +193,7 @@ class DDQNAgent(Agent):
     with torch.no_grad():
       return self._to_one_hot(self._policy_net_pass(state))
 
-  def choose_action(self, state, eps=0):
+  def choose_action(self, state, info, eps=0):
     tensor_state = state.to(self.params.device)
     return self._get_action(tensor_state, eps=eps).squeeze().detach().cpu()
 
@@ -279,15 +279,16 @@ class DDQNAgent(Agent):
       self.metrics["train_losses"].append(0)
 
       for t in range(self.params.max_episode_len):
-        eps = self.params.eps_func(i_episode)
-        action = self._get_action(state, eps=eps)
+        with torch.no_grad():
+          eps = self.params.eps_func(i_episode)
+          action = self._get_action(state, eps=eps)
 
-        next_state, reward, done, _ = env.step(action.squeeze().detach().cpu())
-        total_reward += reward
-        next_state = next_state.unsqueeze(0).to(self.params.device)
-        reward = torch.tensor([reward], device=self.params.device, dtype=torch.float)
+          next_state, reward, done, _ = env.step(action.squeeze().detach().cpu())
+          total_reward += reward
+          next_state = next_state.unsqueeze(0).to(self.params.device)
+          reward = torch.tensor([reward], device=self.params.device, dtype=torch.float)
 
-        self._exp_replay.add(Transition(state, action, reward, next_state, done))
+          self._exp_replay.add(Transition(state, action, reward, next_state, done))
 
         loss = self._optimize_model()
         if loss is not None:

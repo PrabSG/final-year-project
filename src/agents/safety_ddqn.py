@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.nn.utils.rnn import pack_sequence, pad_packed_sequence, PackedSequence
+from tqdm import tqdm
 
 from agents.agent import Agent
 from agents.ddqn import DDQNParams, Basic2dEncoder, QModel
@@ -104,9 +105,13 @@ class SafetyDDQNAgent(Agent):
     with torch.no_grad():
       return self._to_one_hot(self._policy_net_pass(state))
 
-  def choose_action(self, state, eps=0):
+  def choose_action(self, state, info, eps=0):
     tensor_state = state.to(self.params.device)
-    return self._get_action(tensor_state, eps=eps).squeeze().detach().cpu()
+    safety_spec_strs = safety_spec_to_str(info["prog_formula"] if "prog_formula" in info else "True")
+    safety_spec = get_one_hot_spec(safety_spec_strs, info["num_props"] if "prog_formula" in info else 0).to(device=self.params.device)
+
+    comb_state = SafetyState(tensor_state, safety_spec)
+    return self._get_action(comb_state, eps=eps).squeeze().detach().cpu()
 
   def _update_target_network(self):
     self._target_net.load_state_dict(self._policy_net.state_dict())
@@ -193,7 +198,7 @@ class SafetyDDQNAgent(Agent):
 
     optimize_steps = 0
 
-    for i_episode in range(self.params.episodes):
+    for i_episode in tqdm(range(self.params.episodes)):
       if print_logging and (i_episode+1) % 5 == 0:
         print(f"Agent exploring in episode {i_episode + 1}")
       env.reset(random_start=True)
@@ -209,17 +214,18 @@ class SafetyDDQNAgent(Agent):
       self.metrics["train_losses"].append(0)
 
       for t in range(self.params.max_episode_len):
-        eps = self.params.eps_func(i_episode)
-        action = self._get_action(comb_state, eps=eps)
+        with torch.no_grad():
+          eps = self.params.eps_func(i_episode)
+          action = self._get_action(comb_state, eps=eps)
 
-        next_state, reward, done, info = env.step(action.squeeze().detach().cpu())
-        total_reward += reward
-        next_state = next_state.unsqueeze(0).to(self.params.device)
-        reward = torch.tensor([reward], device=self.params.device, dtype=torch.float)
-        violation = info["violation"]
-        prog_safety_spec = get_one_hot_spec(safety_spec_to_str(info["prog_formula"]), env.get_num_props()).to(device=self.params.device)
+          next_state, reward, done, info = env.step(action.squeeze().detach().cpu())
+          total_reward += reward
+          next_state = next_state.unsqueeze(0).to(self.params.device)
+          reward = torch.tensor([reward], device=self.params.device, dtype=torch.float)
+          violation = info["violation"]
+          prog_safety_spec = get_one_hot_spec(safety_spec_to_str(info["prog_formula"]), env.get_num_props()).to(device=self.params.device)
 
-        self._exp_replay.add(SafetyTransition(state, safety_spec, action, reward, next_state, prog_safety_spec, violation, done))
+          self._exp_replay.add(SafetyTransition(state, safety_spec, action, reward, next_state, prog_safety_spec, violation, done))
 
         loss = self._optimize_model()
         if loss is not None:

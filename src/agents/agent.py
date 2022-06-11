@@ -10,7 +10,7 @@ class Agent(ABC):
     pass
 
   @abstractmethod
-  def choose_action(self):
+  def choose_action(self, observation, info):
     pass
 
   def run_tests(self, n_episodes, env, args, print_logging=False, visualise=False, episode=None):
@@ -30,25 +30,27 @@ class Agent(ABC):
       total_rewards.append(0)
 
       observation = env.get_observation()
+      info = env.get_info()
       str_grid = str(env)
 
       while not env.is_complete() and timestep <= args.max_episode_length:
         if visualise:
           frames.append(np.moveaxis(env._env.render("rgb_array"), 2, 0))
 
-        action = self.choose_action(observation)
-        new_observation, reward, done, _ = env.step(action)
+        action = self.choose_action(observation, info)
+        new_observation, reward, done, info = env.step(action)
+        total_rewards[i_episode] += reward
 
-        new_str_grid = str(env)
-        trace.append((str_grid, action, reward, new_str_grid))
+        if print_logging:
+          new_str_grid = str(env)
+          trace.append((str_grid, action, reward, new_str_grid))
+          str_grid = new_str_grid
 
         timestep += 1
         observation = new_observation
-        str_grid = new_str_grid
 
       if print_logging:
         for s, a, r, new_s in trace:
-          total_rewards[i_episode] += r
           print("State:\n", s, "\nAction:", a, "Reward:", r, "\nNew State:\n", new_s)
     
     self.train_mode()
@@ -72,7 +74,7 @@ class RandomAgent(Agent):
   def train(self, env):
     return {}
 
-  def choose_action(self, state):
+  def choose_action(self, state, info):
     return np.random.uniform(0, 1, size=self.action_size)
 
   def train_mode(self):
