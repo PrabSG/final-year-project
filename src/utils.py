@@ -33,7 +33,7 @@ def init_env(args):
   elif args.env == "twopath":
     return MiniGridEnvWrapper("MiniGrid-TwoPathSimple-v0", seed=args.seed, max_steps=args.max_episode_length)
   elif args.env == "safety-micro":
-    return MiniGridSafetyEnv("MiniGrid-UnsafeCrossingMicro-v0", seed=args.seed, max_steps=args.max_episode_length)
+    return MiniGridSafetyEnv("MiniGrid-UnsafeCrossingMicro-v0", seed=args.seed, max_steps=args.max_episode_length, curriculum_equality_episodes=args.curriculum_eq_eps)
   else:
     raise ValueError(f"Environment Type '{args.env}' not defined.")
 

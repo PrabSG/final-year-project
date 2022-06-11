@@ -1,3 +1,4 @@
+from math import sqrt
 import re
 from typing import Dict
 from gym_minigrid import minigrid
@@ -6,6 +7,7 @@ from gym_minigrid.register import register
 from safety.condition import AvoidRequirement, SafetyRequirement, UntilRequirement
 
 DEF_MAX_EPISODE_LENGTH = 50
+DEF_CURRICULUM_EQ_EPS = 100
 
 # Reward Values
 GOAL_REWARD = 1
@@ -59,6 +61,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
     random_crossing=True,
     no_safe_obstacle=False,
     safety_spec="random",
+    curriculum_equality_episodes=100,
     **kwargs
   ):
     self.num_crossings = num_crossings
@@ -85,6 +88,8 @@ class UnsafeCrossingEnv(MiniGridEnv):
     }
     self._no_move_count = 0
     self.randomized_safety_spec = safety_spec == "random"
+    self.curriculum_eq_eps = curriculum_equality_episodes
+    self._num_episodes = 0 # Used for curriculum learning
 
     # Have to set seed here to use random functions
     self.seed(seed=seed)
@@ -195,28 +200,52 @@ class UnsafeCrossingEnv(MiniGridEnv):
     one_hot_obj[encoded_obj[0]] = 1
     return one_hot_obj
 
+  def _get_config_weighting(self):
+    """
+    Use curriculum learning to weight chances of picking each difficulty of specification, so that
+    start at more easier examples, end at point where all equally distributed.
+    
+    Episode to reach equality: e
+    One avoid condition, f(t) = 1
+    Two avoid conditions, f(t) = min(1, (sqrt(t) / (sqrt(e) / 0.8)) + 0.2 )
+    Until condition, f(t) = min(1, (t / (e / 0.8)) + 0.2)
+    """
+    t = self._num_episodes
+    e = self.curriculum_eq_eps
+    w1 = 1
+    w2 = min(1, (sqrt(t) / (sqrt(e) / 0.8)) + 0.2)
+    w_until = min(1, (t / (e / 0.8)) + 0.2)
+
+    w_total = w1 + w2 + w_until
+    norm_weightings = (w1 / w_total, w2 / w_total, w_until / w_total)
+
+    return norm_weightings
+
   def _gen_random_safety_spec(self):
-    # TODO(PrabSG@): Change to use curriculum learning to cycle specifications
     formula = ""
     to_avoid = set(["lava"])
     required = set()
-    spec_configs = ["one_avoid", "two_avoid", "cond_avoid"]
-    config = self._rand_elem(spec_configs)
-    if config == "one_avoid":
+    
+    w_one, w_two, w_until = self._get_config_weighting()
+    sampled = self._rand_float(0, 1.0)
+
+    if sampled < w_one: # One avoid spec
       avoid = self._rand_elem(self.avoid_specs)
       formula = ("until", avoid.get_formula(), SAFETY_PROPS_TO_SYMBOLS["reach_goal"])
       to_avoid = to_avoid.union(avoid.get_avoid_objs())
       required = required.union(avoid.get_req_objs())
-    if config == "two_avoid":
+    elif sampled < w_one + w_two: # Two avoid spec
       avoid1, avoid2 = self._rand_subset(self.avoid_specs, 2)
       formula = ("until", ("and", avoid1.get_formula(), avoid2.get_formula()), SAFETY_PROPS_TO_SYMBOLS["reach_goal"])
       to_avoid = to_avoid.union(avoid1.get_avoid_objs().union(avoid2.get_avoid_objs()))
       required = required.union(avoid1.get_req_objs().union(avoid2.get_req_objs()))
-    elif config == "cond_avoid":
+    else: # Until avoid spec (sampled < w_one + w_two + w_until = 1)
       avoid = self.no_glass_until_water
       formula = avoid.get_formula()
       to_avoid = avoid.get_avoid_objs()
       required = avoid.get_req_objs()
+
+    self._num_episodes += 1
 
     return formula, to_avoid, required
 
@@ -283,7 +312,10 @@ register(
 register(
   id="MiniGrid-UnsafeCrossingMicro-v0",
   entry_point="gym_minigrid.envs:UnsafeCrossingMicroEnv",
-  kwargs={"max_steps": DEF_MAX_EPISODE_LENGTH}
+  kwargs={
+    "max_steps": DEF_MAX_EPISODE_LENGTH,
+    "curriculum_equality_episodes": DEF_CURRICULUM_EQ_EPS
+  }
 )
 
 register(
