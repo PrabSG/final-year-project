@@ -259,7 +259,7 @@ class DDQNAgent(Agent):
     self._optimizer.step()
     return loss.item()
 
-  def train(self, env: Environment, print_logging=True, writer=None):
+  def train(self, env: Environment, print_logging=False, writer=None):
     if print_logging:
       print("Training DDQN agent...")
 

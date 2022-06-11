@@ -110,7 +110,10 @@ class SafetyDDQNAgent(Agent):
     safety_spec_strs = safety_spec_to_str(info["prog_formula"] if "prog_formula" in info else "True")
     safety_spec = get_one_hot_spec(safety_spec_strs, info["num_props"] if "prog_formula" in info else 0).to(device=self.params.device)
 
-    comb_state = SafetyState(tensor_state, safety_spec)
+    comb_state = SafetyState(
+      tensor_state if len(tensor_state.shape) == 2 else tensor_state.unsqueeze(0),
+      safety_spec.unsqueeze(1)
+    )
     return self._get_action(comb_state, eps=eps).squeeze().detach().cpu()
 
   def _update_target_network(self):
@@ -190,7 +193,7 @@ class SafetyDDQNAgent(Agent):
     self._optimizer.step()
     return loss.item()
 
-  def train(self, env: SafetyConstrainedEnv, print_logging=True, writer=None):
+  def train(self, env: SafetyConstrainedEnv, print_logging=False, writer=None):
     if print_logging:
       print("Training DDQN agent...")
 
@@ -251,6 +254,7 @@ class SafetyDDQNAgent(Agent):
 
       if writer is not None:
         writer.add_scalar("train_reward", self.metrics["episode_rewards"][-1], self.metrics["steps"][-1])
+        writer.add_scalar("episode_reward", self.metrics["episode_rewards"][-1], i_episode)
         writer.add_scalar("q_loss", self.metrics["train_losses"][-1], self.metrics["steps"][-1])
     
     env.close()
