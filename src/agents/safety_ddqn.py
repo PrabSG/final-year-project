@@ -232,7 +232,9 @@ class SafetyDDQNAgent(Agent):
         if done:
           break
         state = next_state
-        safety_spec = prog_safety_spec
+        if not violation:
+          # I.e rewind safety spec in case of violation
+          safety_spec = prog_safety_spec
         comb_state = SafetyState(state, safety_spec.unsqueeze(1))
 
       self.metrics["steps"].append(t+1 + (0 if len(self.metrics["steps"]) == 0 else self.metrics["steps"][-1]))
@@ -246,7 +248,7 @@ class SafetyDDQNAgent(Agent):
         writer.add_scalar("q_loss", self.metrics["train_losses"][-1], self.metrics["steps"][-1])
     
     env.close()
-    return self.params.episodes, self.metrics["episode_rewards"], optimize_steps, self.metrics["train_losses"]
+    return self.metrics
 
   def train_mode(self):
     self._policy_net.train()
