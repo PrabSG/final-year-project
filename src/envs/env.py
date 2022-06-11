@@ -14,6 +14,10 @@ class Environment(ABC):
   def _get_state(self):
     pass
 
+  def get_info(self):
+    """Return initial info for environment."""
+    return {}
+
   @abstractmethod
   def get_observation(self):
     return self._get_state()
@@ -86,6 +90,9 @@ class MiniGridEnvWrapper(Environment):
 
   def _get_state(self):
     return self._env.grid
+
+  def get_info(self):
+    return {}
 
   def get_observation(self, obs=None):
     """Return image observation as C x H x W.

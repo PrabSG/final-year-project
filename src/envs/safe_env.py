@@ -64,6 +64,13 @@ class MiniGridSafetyEnv(SafetyConstrainedEnv):
   def _get_state(self):
     return self._env.grid
 
+  def get_info(self):
+    """Return initial info for environment."""
+    return {
+      "prog_formula": self.get_safety_spec(),
+      "num_props": self.get_num_props()
+    }
+
   def get_observation(self, obs=None):
     """Return image observation as C x H x W.
     
