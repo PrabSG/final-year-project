@@ -92,6 +92,7 @@ class MiniGridSafetyEnv(SafetyConstrainedEnv):
     violation, prog_formula = self._safety_monitor.step(info["true_props"] if "true_props" in info else set())
     info["violation"] = violation
     info["prog_formula"] = prog_formula
+    info["num_props"] = self.get_num_props()
     if violation:
       reward += self.violation_penalty
 
