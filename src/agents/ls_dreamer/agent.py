@@ -535,6 +535,7 @@ class LatentShieldedDreamer(Agent):
 
     # Close training environment
     env.close()
+    return self.metrics
 
   def choose_action(self):
     # TODO(@PrabSG): Deprecate this function and find better way to yield states for visualisations

@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
-from ssl import SSL_ERROR_INVALID_ERROR_CODE
+from typing import Dict
 
 import numpy as np
 
 class Agent(ABC):
 
   @abstractmethod
-  def train(self, env):
+  def train(self, env) -> Dict:
     pass
 
   @abstractmethod
@@ -70,7 +70,7 @@ class RandomAgent(Agent):
     self.action_size = env_action_size
 
   def train(self, env):
-    pass
+    return {}
 
   def choose_action(self, state):
     return np.random.uniform(0, 1, size=self.action_size)

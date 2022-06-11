@@ -312,7 +312,7 @@ class DDQNAgent(Agent):
         writer.add_scalar("q_loss", self.metrics["train_losses"][-1], self.metrics["steps"][-1])
     
     env.close()
-    return self.params.episodes, self.metrics["episode_rewards"], optimize_steps, self.metrics["train_losses"]
+    return self.metrics
 
   def train_mode(self):
     self._policy_net.train()
