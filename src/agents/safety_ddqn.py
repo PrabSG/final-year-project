@@ -82,6 +82,7 @@ class SafetyDDQNAgent(Agent):
     self.metrics = {
       "episode_rewards": [],
       "train_losses": [],
+      "cum_num_violations": [],
       "steps": []
     }
   
@@ -211,6 +212,7 @@ class SafetyDDQNAgent(Agent):
       safety_spec = get_one_hot_spec(safety_spec_strs, env.get_num_props()).to(device=self.params.device)
 
       total_reward = 0
+      num_violations = 0
       state = env.get_observation().unsqueeze(0).to(self.params.device)
       comb_state = SafetyState(state, safety_spec.unsqueeze(1))
 
@@ -226,6 +228,7 @@ class SafetyDDQNAgent(Agent):
           next_state = next_state.unsqueeze(0).to(self.params.device)
           reward = torch.tensor([reward], device=self.params.device, dtype=torch.float)
           violation = info["violation"]
+          num_violations += 1 if violation else 0
           prog_safety_spec = get_one_hot_spec(safety_spec_to_str(info["prog_formula"]), env.get_num_props()).to(device=self.params.device)
 
           self._exp_replay.add(SafetyTransition(state, safety_spec, action, reward, next_state, prog_safety_spec, violation, done))
@@ -248,7 +251,8 @@ class SafetyDDQNAgent(Agent):
 
       self.metrics["steps"].append(t+1 + (0 if len(self.metrics["steps"]) == 0 else self.metrics["steps"][-1]))
       self.metrics["episode_rewards"].append(total_reward)
-      
+      self.metrics["cum_num_violations"].append(num_violations + (0 if len(self.metrics["cum_num_violations"]) == 0 else self.metrics["cum_num_violations"][-1]))
+
       if print_logging and (i_episode+1) % 5 == 0:
         print(f"Episode reward: {total_reward}")
 
