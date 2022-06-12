@@ -1,11 +1,17 @@
+import argparse
 import math
+import pickle
+from typing import Dict, List
 
 from array2gif import write_gif
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
 from envs.env import BasicEnv, MiniGridEnvWrapper
 from envs.safe_env import MiniGridSafetyEnv
+
+cols = [('mediumpurple', 'indigo'), ('palegreen', 'seagreen'), ('lightcoral', 'firebrick'), ('navajowhite', 'darkorange'), ('lightskyblue', 'deepskyblue'), ('lightgoldenrodyellow', 'gold'), ('whitesmoke', 'darkgrey'), ('pink', 'magenta')]
 
 class DimensionError(IndexError):
   def __init__(self, expected, given, *args: object) -> None:
@@ -59,3 +65,44 @@ def visualise_agent(env, agent, args, episode=None):
   print("Saving gif... ", end="")
   write_gif(np.array(frames), args.results_dir + filename, fps=1/0.1)
   print("Done.")
+
+def plot_agent_variants(all_metrics: List[List[Dict]], variant_labels: List[str], fields: List[str], save_dir: str):
+  for field in fields:
+    for variant in range(len(variant_labels)):
+      num_agents = len(all_metrics[variant])
+      datapoints = []
+      for i_agent in range(num_agents):
+        data = all_metrics[variant][i_agent][field]
+        datapoints.append(data)
+      np_data = np.array(datapoints)
+      data_mean = np.mean(np_data, axis=0)
+      data_std = np.std(np_data, axis=0)
+
+      plt.fill_between(range(len(data_mean)), data_mean + data_std, data_mean - data_std, color=cols[0][0], alpha=0.5)
+      plt.plot(data_mean, color=cols[0][1], label=variant_labels[variant])
+
+    plt.xlabel("Episodes")
+    plt.ylabel("Total Episodic Reward")
+    plt.grid()
+    plt.legend(loc="lower right")
+    plt.savefig(save_dir + f"/{field}_plot.pgf", format="pgf")
+    plt.close()
+
+
+if __name__ == "__main__":
+  parser = argparse.ArgumentParser(description="Agent and Environment options")
+  # Plotting options
+  parser.add_argument("--plot", action="store_true", help="Plot results into a pgf")
+  parser.add_argument("--load-metrics", type=str, help="Pickle file location for metrics")
+  parser.add_argument("--results-dir", type=str, help="Location to save plots")
+
+  args = parser.parse_args()
+
+  if args.plot and args.load_metrics is not None and args.results_dir is not None:
+    with open(args.load_metrics, "rb") as f:
+      print("Loading metrics file...")
+      agent_metrics = pickle.load(f)
+
+    fields = list(agent_metrics[0].keys() - {"steps"})
+    print("Plotting...")
+    plot_agent_variants([agent_metrics], [None], fields, args.results_dir)
