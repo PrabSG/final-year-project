@@ -13,7 +13,7 @@ from agents.ddqn import DDQNAgent, DDQNParams
 from agents.ls_dreamer import LSDreamerParams, LatentShieldedDreamer
 from agents.safety_ddqn import SafetyDDQNAgent, SafetyDDQNParams
 from safety.utils import get_encoding_size
-from utils import visualise_agent, init_env
+from utils import plot_agent_variants, visualise_agent, init_env
 
 AGENT_CHOICES = ["random", "ddqn", "safety-ddqn", "ls-dreamer"]
 ENV_CHOICES = ["basic", "unsafe-simple", "unsafe-micro", "unsafe-small", "unsafe-med", "twopath", "safety-micro"]
@@ -106,9 +106,12 @@ if __name__ == "__main__":
       agent_metrics.append(metrics)
 
     if args.save_metrics:
-      with open(args.results_dir + f"/metrics_{args.num_agents}_agents", "wb") as f:
+      with open(args.results_dir + f"/metrics_{args.num_agents}_agents.pickle", "wb") as f:
         pickle.dump(agent_metrics, f)
-    # TODO(PrabSG@): Write plotting function
+    
+    fields = list(agent_metrics[0].keys() - {"steps"})
+    plot_agent_variants([agent_metrics], [None], fields, args.results_dir)
+
   else:
     summary_name = results_dir + "/{}_{}_log"
     writer = SummaryWriter(summary_name.format(args.env, args.id))
