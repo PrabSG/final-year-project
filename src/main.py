@@ -37,7 +37,8 @@ def init_agent(agent_type, env, args):
     params = DDQNParams(args.train_episodes, args.max_episode_length, *ddqn_params, encoding_size=64, cnn_channels=[16, 32, 64], cnn_kernels=[3, 3, 5], device=device)
     return DDQNAgent(env.state_size, env.action_size, params)
   elif agent_type == "safety-ddqn":
-    params = SafetyDDQNParams(args.train_episodes, args.max_episode_length, *ddqn_params, encoding_size=64, cnn_channels=[16, 32, 64], cnn_kernels=[3, 3, 5], device=device)
+    assert isinstance(env, SafetyConstrainedEnv)
+    params = SafetyDDQNParams(env.get_num_props(), args.train_episodes, args.max_episode_length, *ddqn_params, spec_encoding_hidden_size=64, encoding_size=64, cnn_channels=[16, 32, 64], cnn_kernels=[3, 3, 5], device=device)
     num_props = env.get_num_props() if isinstance(env, SafetyConstrainedEnv) else 0
     return SafetyDDQNAgent(env.state_size, env.action_size, get_encoding_size(num_props), params)
   elif agent_type == "ls-dreamer":
