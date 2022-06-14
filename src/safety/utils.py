@@ -2,9 +2,12 @@ from typing import List, Union, Tuple
 
 import torch
 
+START_TOKEN = "<s>"
+EOS_TOKEN = "</s>"
+
 UNARY_OPERATORS = ["not", "next"]
 BINARY_OPERATORS = ["and", "or", "until"]
-MISC_SYMBOLS = ["True", "False", "(", ")"]
+MISC_SYMBOLS = ["True", "False", "(", ")", START_TOKEN, EOS_TOKEN]
 
 OPERATOR_MAPPING = {
   "not": 0,
@@ -15,10 +18,23 @@ OPERATOR_MAPPING = {
   "True": 5,
   "False": 6,
   "(": 7,
-  ")": 8
+  ")": 8,
+  START_TOKEN: 9,
+  EOS_TOKEN: 10
 }
 
+IDX_TO_OPERATOR = dict(zip(OPERATOR_MAPPING.values(), OPERATOR_MAPPING.keys()))
+
 def safety_spec_to_str(spec: Union[Tuple, str]) -> List[str]:
+  spec_strs = []
+  spec_strs.append("<s>")
+
+  spec_strs += _recurse_spec_to_str(spec)
+
+  spec_strs.append("</s>")
+  return spec_strs
+
+def _recurse_spec_to_str(spec: Union[Tuple, str]) -> List[str]:
   # Base case
   if isinstance(spec, str):
     return [spec]
@@ -29,11 +45,11 @@ def safety_spec_to_str(spec: Union[Tuple, str]) -> List[str]:
   op = spec[0] # Operator always in first position in Tuple
   if op in UNARY_OPERATORS:
     spec_strs.append(op)
-    spec_strs += safety_spec_to_str(spec[1])
+    spec_strs += _recurse_spec_to_str(spec[1])
   elif op in BINARY_OPERATORS:
-    spec_strs += safety_spec_to_str(spec[1])
+    spec_strs += _recurse_spec_to_str(spec[1])
     spec_strs.append(op)
-    spec_strs += safety_spec_to_str(spec[2])
+    spec_strs += _recurse_spec_to_str(spec[2])
   else:
     raise NotImplementedError(f"Unrecognised logical operator {op} in {spec}.")
   spec_strs.append(")")
@@ -41,6 +57,9 @@ def safety_spec_to_str(spec: Union[Tuple, str]) -> List[str]:
 
 def _prop_mapping(prop: str):
   return ord(prop) - ord("a")
+
+def _inv_prop_mapping(idx: str):
+  return chr(idx + ord("a"))
 
 def get_one_hot_spec(safety_spec: List[str], num_props: int) -> torch.Tensor:
   vocab_size = get_encoding_size(num_props)
@@ -56,6 +75,23 @@ def get_one_hot_spec(safety_spec: List[str], num_props: int) -> torch.Tensor:
       one_hot_encoding[i][prop_encoding] = 1
 
   return one_hot_encoding
+
+def from_one_hot(one_hot_spec: torch.Tensor, target_len: int, num_props: int) -> List[str]:
+  """
+  Input:
+    - one_hot_spec: (max_len, encoding_size)
+  """
+  idxs = torch.argmax(one_hot_spec, dim=1).cpu().numpy()
+  output_strs = []
+  for i in range(target_len):
+    idx = idxs[i]
+    if idx < num_props:
+      output_strs.append(_inv_prop_mapping(idx))
+    else:
+      op_idx = idx - num_props
+      output_strs.append(IDX_TO_OPERATOR[op_idx])
+  
+  return output_strs
 
 def get_encoding_size(num_props: int) -> int:
   return num_props + len(UNARY_OPERATORS) + len(BINARY_OPERATORS) + len(MISC_SYMBOLS)
