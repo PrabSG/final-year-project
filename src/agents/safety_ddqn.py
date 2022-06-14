@@ -42,6 +42,85 @@ class SpecEncoder(nn.Module):
       hiddens, _ = pad_packed_sequence(hiddens)
     return hiddens.sum(dim=0)
 
+
+class SpecTokenDecoder(nn.Module):
+  def __init__(self, hidden_size, encoding_size) -> None:
+    super().__init__()
+    self.lstm_cell = nn.LSTMCell(input_size=encoding_size, hidden_size=hidden_size)
+    # self.gru_cell = nn.GRUCell(input_size=encoding_size, hidden_size=hidden_size)
+    self.token_decoder = nn.Sequential(
+      nn.Linear(hidden_size, 128),
+      nn.ReLU(),
+      nn.Linear(128, 128),
+      nn.ReLU(),
+      nn.Linear(128, encoding_size),
+    )
+
+  def forward(self, prev_token, hidden_state, cell_state):
+    """
+    Input:
+      - prev_token: (batch_size, spec_encoding_size)
+      - hidden_state = (batch_size, 2 * spec_hidden_size)
+      - cell_state = (batch_size, 2 * spec_hidden_size)
+
+    Output:
+      - predicted_token: (batch_size, encoding_size)
+    """
+
+    hx, cx = self.lstm_cell(prev_token, (hidden_state, cell_state))
+    # hx = self.gru_cell(prev_token, hidden_state)
+    predicted_token = self.token_decoder(hx)
+
+    return predicted_token, hx, cx
+    # return predicted_token, hx
+
+
+class SpecDecoder(nn.Module):
+  def __init__(self, hidden_size, encoding_size, num_props) -> None:
+    super().__init__()
+    self.hidden_size = hidden_size
+    self.encoding_size = encoding_size
+    self.num_props = num_props
+
+    self.token_decoder = SpecTokenDecoder(hidden_size=hidden_size, encoding_size=encoding_size)
+
+  def _init_inputs(self, batch_size, device):
+    start_encoding = get_one_hot_spec([START_TOKEN], self.num_props).to(device=device)
+    start_tensor = torch.zeros((batch_size, 1, self.encoding_size)).to(device=device)
+    start_tensor[:] = start_encoding
+
+    c0 = torch.zeros((batch_size, self.hidden_size)).to(device=device)
+
+    return start_tensor, c0
+
+  def forward(self, hidden_specs, padded_target_spec, max_len):
+    """
+    Input:
+      - hidden_specs: (batch_size, 2 * spec_hidden_size)
+      - padded_target_spec: (batch_size, max_len, encoding_size)
+      - target_lens: (batch_size) Target spec lengths including start and eos tokens
+
+    Output:
+      - decoded_spec: (batch_size, max_len, encoding_size)
+    """
+    batch_size = hidden_specs.shape[0]
+    # len_mask = torch.tensor(
+    #   [[1 if i < target_lens[j] else 0 for i in range(max_len)] for j in range(batch_size)],
+    #   dtype=torch.float,
+    #   device=hidden_specs.device
+    # )
+
+    hx = hidden_specs
+    decoded_spec, cx = self._init_inputs(batch_size, hx.device)
+    
+    for i in range(max_len - 1):
+      next_token, hx, cx = self.token_decoder(padded_target_spec[:, i], hx, cx)
+      # decoded_spec = torch.cat((decoded_spec, next_token * len_mask[:, i+1]), dim=1)
+      decoded_spec = torch.cat((decoded_spec, next_token.unsqueeze(1)), dim=1)
+    
+    return decoded_spec
+
+
 class SpecLSTMDecoder(nn.Module):
   def __init__(self, hidden_size, encoding_size, num_props) -> None:
     super().__init__()
