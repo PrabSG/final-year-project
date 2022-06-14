@@ -67,7 +67,7 @@ class EpisodicExperienceReplay():
     self._buffer.append(episode_samples)
     self._ep_lens = np.append(self._ep_lens, new_ep_len)
     self._num_eps += 1
-    self._num_samples(new_ep_len)
+    self._num_samples += new_ep_len
 
   def get_sample(self, sample_size):
     """Return uniformly random sample of experiences with replacement."""
