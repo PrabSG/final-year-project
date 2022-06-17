@@ -207,7 +207,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
     
     Episode to reach equality: e
     One avoid condition, f(t) = 1
-    Two avoid conditions, f(t) = min(1, (sqrt(t) / (sqrt(e) / 0.8)) + 0.2 )
+    Two avoid conditions, f(t) = min(1, (sqrt(t) / (sqrt(e) / 0.8)) + 0.2)
     Until condition, f(t) = min(1, (t / (e / 0.8)) + 0.2)
     """
     t = self._num_episodes
