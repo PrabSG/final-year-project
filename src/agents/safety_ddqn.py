@@ -2,8 +2,7 @@ from collections import namedtuple
 import itertools
 import random
 import time
-from turtle import forward
-from typing import Union
+from typing import Union, Optional
 
 import numpy as np
 import torch
@@ -15,7 +14,7 @@ from tqdm import tqdm
 from agents.agent import Agent
 from agents.ddqn import DDQNParams, Basic2dEncoder, QModel
 from envs.safe_env import SafetyConstrainedEnv
-from replay import ExperienceReplay
+from replay import EpisodicExperienceReplay, ExperienceReplay
 from safety.utils import START_TOKEN, from_one_hot, safety_spec_to_str, get_one_hot_spec
 
 SAFETY_TRANSITION_TUPLE_SIZE = 8
@@ -24,11 +23,16 @@ SafetyTransition = namedtuple("SafetyTransition", ("state", "safety_spec", "acti
 SafetyState = namedtuple("SafetyState", ["env_state", "formula"])
 
 class SafetyDDQNParams(DDQNParams):
-  def __init__(self, num_env_props, *args, recon_loss_scale=0.01, spec_encoding_hidden_size=64, **kwargs):
+  def __init__(self, num_env_props, *args, q_loss_scale=10, vio_loss_scale=1, recon_loss_scale=0.1, spec_encoding_hidden_size=64, rnn_hidden_size=64, violation_threshold=0.5, chunk_size=4, **kwargs):
     super().__init__(*args, **kwargs)
     self.num_props = num_env_props
+    self.q_loss_scale = q_loss_scale
+    self.vio_loss_scale = vio_loss_scale
     self.recon_loss_scale = recon_loss_scale
     self.spec_hidden_size = spec_encoding_hidden_size
+    self.rnn_hidden_size = rnn_hidden_size
+    self.violation_threshold = violation_threshold
+    self.chunk_size = chunk_size
 
 
 class SpecEncoder(nn.Module):
@@ -42,7 +46,7 @@ class SpecEncoder(nn.Module):
       hiddens, _ = pad_packed_sequence(hiddens)
     return hiddens.sum(dim=0)
 
-class SpecLSTMDecoder(nn.Module):
+class SpecDecoder(nn.Module):
   def __init__(self, hidden_size, encoding_size, num_props) -> None:
     super().__init__()
     self.hidden_size = hidden_size
@@ -133,7 +137,10 @@ class SafetyRNN(nn.Module):
     """
     curr_state = torch.cat((encoded_spec, encoded_obs, action), dim=1)
     batch_size = curr_state.shape[0]
-    new_hidden = self.rnn(curr_state, hidden_state if hidden_state is not None else torch.zeros((batch_size, self.hidden_size)))
+    if hidden_state is None:
+      hidden_state = torch.zeros((batch_size, self.hidden_size), device=curr_state.device)
+
+    new_hidden = self.rnn(curr_state, hidden_state)
     p_violation = self.violation_predictor(new_hidden)
     prog_spec = self.spec_progressor(torch.cat((encoded_spec, new_hidden), dim=1))
     return p_violation, prog_spec, new_hidden
@@ -154,13 +161,9 @@ class SafetyDDQNAgent(Agent):
       assert params.cnn_kernels is not None
       
       self.multi_dim_input = True
-      self._policy_net_encoder = Basic2dEncoder(
+      self._state_encoder = Basic2dEncoder(
           state_size, params.encoding_size, params.cnn_kernels, params.cnn_channels
         ).to(self.params.device)
-      self._target_net_encoder = Basic2dEncoder(
-          state_size, params.encoding_size, params.cnn_kernels, params.cnn_channels
-        ).to(self.params.device)
-      self._target_net_encoder.load_state_dict(self._policy_net_encoder.state_dict())
       input_shape = params.encoding_size
     else:
       self.multi_dim_input = False
@@ -168,23 +171,25 @@ class SafetyDDQNAgent(Agent):
 
     # Initialise safety specification encoder
     self._spec_encoder = SpecEncoder(spec_encoding_size, params.spec_hidden_size).to(device=params.device)
-    self._spec_decoder = SpecLSTMDecoder(2 * params.spec_hidden_size, spec_encoding_size, params.num_props).to(device=params.device)
+    self._spec_decoder = SpecDecoder(2 * params.spec_hidden_size, spec_encoding_size, params.num_props).to(device=params.device)
+    self._safety_rnn = SafetyRNN(2 * params.spec_hidden_size, input_shape, self.action_size, params.rnn_hidden_size).to(device=params.device)
     self._policy_net = QModel(input_shape + (2 * params.spec_hidden_size), self.action_size, params.nn_sizes).to(params.device)
     self._target_net = QModel(input_shape + (2 * params.spec_hidden_size), self.action_size, params.nn_sizes).to(params.device)
     self._target_net.load_state_dict(self._policy_net.state_dict())
     
     if self.multi_dim_input:
       self._optimizer = torch.optim.Adam(
-        itertools.chain(self._policy_net_encoder.parameters(), self._policy_net.parameters(), self._spec_encoder.parameters(), self._spec_decoder.parameters()), lr=params.lr)
+        itertools.chain(self._state_encoder.parameters(), self._policy_net.parameters(), self._spec_encoder.parameters(), self._spec_decoder.parameters(), self._safety_rnn.parameters()), lr=params.lr)
     else:
-      self._optimizer = torch.optim.Adam(itertools.chain(self._policy_net.parameters(), self._spec_encoder.parameters(), self._spec_decoder.parameters()), lr=params.lr)
+      self._optimizer = torch.optim.Adam(itertools.chain(self._policy_net.parameters(), self._spec_encoder.parameters(), self._spec_decoder.parameters(), self._safety_rnn.parameters()), lr=params.lr)
     
-    self._exp_replay = ExperienceReplay(tuple_shape=SAFETY_TRANSITION_TUPLE_SIZE, buffer_size=params.buff_size)
+    self._exp_replay = EpisodicExperienceReplay(tuple_shape=SAFETY_TRANSITION_TUPLE_SIZE, buffer_size=params.buff_size)
 
     self.metrics = {
       "episode_rewards": [],
       "train_losses": [],
       "q_losses": [],
+      "vio_losses": [],
       "recon_losses": [],
       "cum_num_violations": [],
       "steps": []
@@ -200,6 +205,36 @@ class SafetyDDQNAgent(Agent):
     a = torch.zeros((1, np.prod(a_vec.shape)), device=self.params.device, dtype=torch.long)
     a[0, max_idx] = 1
     return a
+
+  def _get_safe_action(self, state: SafetyState, rnn_state: Optional[torch.Tensor] = None, eps=0):
+    act_randomly = False
+    
+    if eps > 0:
+      sample = random.random()
+      if sample < eps:
+        act_randomly = True
+    
+    with torch.no_grad():
+      encoded_formula = self._spec_encoder(state.formula)
+      if self.multi_dim_input:
+        encoded_state = self._state_encoder(state.env_state)
+      else:
+        encoded_state = state.env_state
+
+      if not act_randomly:
+        q_vals = self._policy_net_pass(state)
+        best_action_idxs = torch.argsort(q_vals, descending=True).squeeze()
+
+        for i in range(self.action_size):
+          proposed_action = self._idx_to_one_hot(best_action_idxs[i], self.action_size)
+          p_violation, prog_spec, new_rnn_state = self._safety_rnn(encoded_formula, encoded_state, proposed_action, hidden_state=rnn_state)
+          if p_violation < self.params.violation_threshold:
+            return proposed_action, prog_spec, new_rnn_state
+      
+      # No safe actions or epsilon exploration so act randomly
+      rand_action = self._idx_to_one_hot(random.randrange(self.action_size), self.action_size)
+      _, prog_spec, new_rnn_state = self._safety_rnn(encoded_formula, encoded_state, rand_action, hidden_state=rnn_state)
+      return rand_action, prog_spec, new_rnn_state
 
   def _get_action(self, state, eps=0):
     if eps > 0:
@@ -223,14 +258,14 @@ class SafetyDDQNAgent(Agent):
 
   def _update_target_network(self):
     self._target_net.load_state_dict(self._policy_net.state_dict())
-    if self.multi_dim_input:
-      self._target_net_encoder.load_state_dict(self._policy_net_encoder.state_dict())
+    # if self.multi_dim_input:
+    #   self._target_net_encoder.load_state_dict(self._policy_net_encoder.state_dict())
 
   def _policy_net_pass(self, state: SafetyState):
     encoded_formula = self._spec_encoder(state.formula)
 
     if self.multi_dim_input:
-      encoded_state = self._policy_net_encoder(state.env_state)
+      encoded_state = self._state_encoder(state.env_state)
       return self._policy_net(torch.cat((encoded_state, encoded_formula), dim=1))
     else:
       return self._policy_net(torch.cat((state.env_state, encoded_formula), dim=1))
@@ -239,7 +274,7 @@ class SafetyDDQNAgent(Agent):
     encoded_formula = self._spec_encoder(state.formula)
 
     if self.multi_dim_input:
-      encoded_state = self._target_net_encoder(state.env_state)
+      encoded_state = self._state_encoder(state.env_state)
       return self._target_net(torch.cat((encoded_state, encoded_formula), dim=1))
     else:
       return self._target_net(torch.cat((state.env_state, encoded_formula), dim=1))
@@ -252,13 +287,10 @@ class SafetyDDQNAgent(Agent):
     batches = SafetyTransition(*zip(*transitions))
 
     state_batch = torch.cat(batches.state)
-    pad_spec_batch = nn.utils.rnn.pad_sequence(batches.safety_spec, batch_first=True)
     pack_spec_batch = nn.utils.rnn.pack_sequence(batches.safety_spec, enforce_sorted=False)
     action_batch = torch.cat(batches.action)
     reward_batch = torch.cat(batches.reward)
     next_state_batch = torch.cat(batches.next_state)
-    prog_spec_batch = nn.utils.rnn.pad_sequence(batches.prog_spec, batch_first=True)
-    violation = torch.tensor(batches.violation, dtype=torch.bool, device=self.params.device)
     non_terminal_mask = torch.logical_not(torch.tensor(batches.done))
 
     # Calculate TD Loss
@@ -288,26 +320,54 @@ class SafetyDDQNAgent(Agent):
 
     q_loss = torch.mean((state_qs - expected_qs.unsqueeze(1)).pow(2))
 
-    # Calculate Reconstructed Spec Loss
+    # Sample episode chunks
+    chunks = self._exp_replay.get_sample_chunks(self.params.batch_size // self.params.chunk_size, self.params.chunk_size)
+    chunks_by_seq = list(zip(*chunks))
 
-    encoded_spec = self._spec_encoder(pack_spec_batch)
-    target_lens = [spec.shape[0] for spec in batches.safety_spec]
-    max_len = max(target_lens)
-    decoded_spec_logits = self._spec_decoder(encoded_spec, pad_spec_batch, max_len)
+    violation_loss = 0
+    recon_loss = 0
+    safety_rnn_state = torch.zeros((self.params.batch_size // self.params.chunk_size, self.params.rnn_hidden_size), device=self.params.device)
 
-    padding_mask = torch.tensor(
-      [[0 if i < target_lens[j] else -1 for i in range(max_len)] for j in range(self.params.batch_size)],
-      dtype=torch.int,
-      device=self.params.device
-    )
+    for step in range(self.params.chunk_size):
+      chunk_batches = SafetyTransition(*zip(*chunks_by_seq[step]))
+      state_batch = torch.cat(chunk_batches.state)
+      pack_spec_batch = nn.utils.rnn.pack_sequence(chunk_batches.safety_spec, enforce_sorted=False)
+      action_batch = torch.cat(chunk_batches.action)
+      pad_prog_spec = nn.utils.rnn.pad_sequence(chunk_batches.prog_spec, batch_first=True)
+      violation = torch.tensor(chunk_batches.violation, dtype=torch.float, device=self.params.device).unsqueeze(1)
 
-    target_spec = torch.argmax(pad_spec_batch, dim=2) + padding_mask
-    recon_loss = F.cross_entropy(decoded_spec_logits.permute(0, 2, 1), target_spec, reduction="mean", ignore_index=-1)
-    recon_loss = recon_loss * self.params.recon_loss_scale
+      # Calculate Violation Loss
+      encoded_specs = self._spec_encoder(pack_spec_batch)
+      if self.multi_dim_input:
+        encoded_state = self._state_encoder(state_batch)
+      else:
+        encoded_state = state_batch
+
+      p_violation, pred_prog_spec, safety_rnn_state = self._safety_rnn(
+        encoded_specs, encoded_state, action_batch, hidden_state=safety_rnn_state)
+      
+      violation_loss += F.binary_cross_entropy(p_violation, violation, reduction="mean")
+
+      # Calculate Reconstructed Spec Loss
+
+      target_lens = [spec.shape[0] for spec in chunk_batches.prog_spec]
+      max_len = max(target_lens)
+      decoded_spec_logits = self._spec_decoder(pred_prog_spec, pad_prog_spec, max_len)
+
+      padding_mask = torch.tensor(
+        [[0 if i < target_lens[j] else -1 for i in range(max_len)] for j in range(self.params.batch_size // self.params.chunk_size)],
+        dtype=torch.int,
+        device=self.params.device
+      )
+
+      target_spec = torch.argmax(pad_prog_spec, dim=2) + padding_mask
+      recon_loss += F.cross_entropy(decoded_spec_logits.permute(0, 2, 1), target_spec, reduction="mean", ignore_index=-1)
     
     # Backpropagation
 
-    loss = q_loss + recon_loss
+    loss = ((self.params.q_loss_scale * q_loss) + 
+      (self.params.vio_loss_scale * violation_loss) +
+      (self.params.recon_loss_scale * recon_loss))
 
     self._optimizer.zero_grad()
     loss.backward()
@@ -318,13 +378,14 @@ class SafetyDDQNAgent(Agent):
       param.grad.data.clamp_(-1, 1)
     for param in self._spec_decoder.parameters():
       param.grad.data.clamp_(-1, 1)
+    # TODO(PrabSG@): Check if want to clamp RNN grads
 
     if self.multi_dim_input:
-      for param in self._policy_net_encoder.parameters():
+      for param in self._state_encoder.parameters():
         param.grad.data.clamp_(-1, 1)
 
     self._optimizer.step()
-    return q_loss.cpu().item(), recon_loss.cpu().item()
+    return self.params.q_loss_scale * q_loss.cpu().item(), self.params.vio_loss_scale * violation_loss.cpu().item(), recon_loss.cpu().item() * self.params.recon_loss_scale
 
   def train(self, env: SafetyConstrainedEnv, print_logging=False, writer=None):
     if print_logging:
@@ -347,15 +408,18 @@ class SafetyDDQNAgent(Agent):
       num_violations = 0
       state = env.get_observation().unsqueeze(0).to(self.params.device)
       comb_state = SafetyState(state, safety_spec.unsqueeze(1))
+      safety_rnn_state = None
+      episode_transitions = []
 
       self.metrics["train_losses"].append(0)
       self.metrics["q_losses"].append(0)
+      self.metrics["vio_losses"].append(0)
       self.metrics["recon_losses"].append(0)
 
       for t in range(self.params.max_episode_len):
         with torch.no_grad():
           eps = self.params.eps_func(i_episode)
-          action = self._get_action(comb_state, eps=eps)
+          action, _, safety_rnn_state  = self._get_safe_action(comb_state, rnn_state=safety_rnn_state, eps=eps)
 
           next_state, reward, done, info = env.step(action.squeeze().detach().cpu())
           total_reward += reward
@@ -365,13 +429,14 @@ class SafetyDDQNAgent(Agent):
           num_violations += 1 if violation else 0
           prog_safety_spec = get_one_hot_spec(safety_spec_to_str(info["prog_formula"]), env.get_num_props()).to(device=self.params.device)
 
-          self._exp_replay.add(SafetyTransition(state, safety_spec, action, reward, next_state, prog_safety_spec, violation, done))
+          episode_transitions.append(SafetyTransition(state, safety_spec, action, reward, next_state, prog_safety_spec, violation, done))
 
         loss = self._optimize_model()
         if loss is not None:
-          q_loss, recon_loss = loss
-          self.metrics["train_losses"][-1] += q_loss + recon_loss
+          q_loss, vio_loss, recon_loss = loss
+          self.metrics["train_losses"][-1] += q_loss + vio_loss + recon_loss
           self.metrics["q_losses"][-1] += q_loss
+          self.metrics["vio_losses"][-1] += vio_loss
           self.metrics["recon_losses"][-1] += recon_loss
 
           optimize_steps += 1
@@ -386,6 +451,8 @@ class SafetyDDQNAgent(Agent):
           safety_spec = prog_safety_spec
         comb_state = SafetyState(state, safety_spec.unsqueeze(1))
 
+      self._exp_replay.add_episode(episode_transitions)
+
       self.metrics["steps"].append(t+1 + (0 if len(self.metrics["steps"]) == 0 else self.metrics["steps"][-1]))
       self.metrics["episode_rewards"].append(total_reward)
       self.metrics["cum_num_violations"].append(num_violations + (0 if len(self.metrics["cum_num_violations"]) == 0 else self.metrics["cum_num_violations"][-1]))
@@ -397,11 +464,13 @@ class SafetyDDQNAgent(Agent):
         writer.add_scalar("train_reward", self.metrics["episode_rewards"][-1], self.metrics["steps"][-1])
         writer.add_scalar("opt_steps/train_loss", self.metrics["train_losses"][-1] / t, self.metrics["steps"][-1])
         writer.add_scalar("opt_steps/q_loss", self.metrics["q_losses"][-1] / t, self.metrics["steps"][-1])
+        writer.add_scalar("opt_steps/vio_loss", self.metrics["vio_losses"][-1] / t, self.metrics["steps"][-1])
         writer.add_scalar("opt_steps/recon_loss", self.metrics["recon_losses"][-1] / t, self.metrics["steps"][-1])
         writer.add_scalar("episodic/train_reward", self.metrics["episode_rewards"][-1], i_episode)
         writer.add_scalar("episodic/cum_num_violations", self.metrics["cum_num_violations"][-1], i_episode)
         writer.add_scalar("episodic/train_loss", self.metrics["train_losses"][-1] / t, i_episode)
         writer.add_scalar("episodic/q_loss", self.metrics["q_losses"][-1] / t, i_episode)
+        writer.add_scalar("episodic/vio_loss", self.metrics["vio_losses"][-1] / t, i_episode)
         writer.add_scalar("episodic/recon_loss", self.metrics["recon_losses"][-1] / t, i_episode)
     
     env.close()
@@ -412,11 +481,11 @@ class SafetyDDQNAgent(Agent):
     self._spec_encoder.train()
     self._spec_decoder.train()
     if self.multi_dim_input:
-      self._policy_net_encoder.train()
+      self._state_encoder.train()
 
   def evaluate_mode(self):
     self._policy_net.eval()
     self._spec_encoder.eval()
     self._spec_decoder.eval()
     if self.multi_dim_input:
-      self._policy_net_encoder.eval()
+      self._state_encoder.eval()
