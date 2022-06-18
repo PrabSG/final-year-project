@@ -12,10 +12,11 @@ from agents.agent import RandomAgent
 from agents.ddqn import DDQNAgent, DDQNParams
 from agents.ls_dreamer import LSDreamerParams, LatentShieldedDreamer
 from agents.safety_ddqn import SafetyDDQNAgent, SafetyDDQNParams
+from agents.ddqn_L import DDQNLAgent, DDQNLParams
 from safety.utils import get_encoding_size
 from utils import plot_agent_variants, visualise_agent, init_env
 
-AGENT_CHOICES = ["random", "ddqn", "safety-ddqn", "ls-dreamer"]
+AGENT_CHOICES = ["random", "ddqn", "safety-ddqn", "ddqn-l", "ls-dreamer"]
 ENV_CHOICES = ["basic", "unsafe-simple", "unsafe-micro", "unsafe-small", "unsafe-med", "twopath", "safety-simple", "safety-micro"]
 MAX_EPISODE_LENGTH = 50
 SEED_EPISODES = 5
@@ -41,6 +42,11 @@ def init_agent(agent_type, env, args):
     params = SafetyDDQNParams(env.get_num_props(), args.train_episodes, args.max_episode_length, *ddqn_params, spec_encoding_hidden_size=64, encoding_size=64, cnn_channels=[16, 32, 64], cnn_kernels=[3, 3, 5], device=device)
     num_props = env.get_num_props() if isinstance(env, SafetyConstrainedEnv) else 0
     return SafetyDDQNAgent(env.state_size, env.action_size, get_encoding_size(num_props), params)
+  elif agent_type == "ddqn-l":
+    assert isinstance(env, SafetyConstrainedEnv)
+    params = DDQNLParams(env.get_num_props(), args.train_episodes, args.max_episode_length, *ddqn_params, spec_encoding_hidden_size=64, encoding_size=64, cnn_channels=[16, 32, 64], cnn_kernels=[3, 3, 5], device=device)
+    num_props = env.get_num_props() if isinstance(env, SafetyConstrainedEnv) else 0
+    return DDQNLAgent(env.state_size, env.action_size, get_encoding_size(num_props), params)
   elif agent_type == "ls-dreamer":
     params = LSDreamerParams(
       args, args.results_dir, episodes=args.train_episodes, test=True, test_interval=25,

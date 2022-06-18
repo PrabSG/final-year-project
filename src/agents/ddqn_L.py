@@ -22,7 +22,7 @@ SAFETY_TRANSITION_TUPLE_SIZE = 8
 SafetyTransition = namedtuple("SafetyTransition", ("state", "safety_spec", "action", "reward", "next_state", "prog_spec", "violation", "done"))
 SafetyState = namedtuple("SafetyState", ["env_state", "formula"])
 
-class SafetyDDQNParams(DDQNParams):
+class DDQNLParams(DDQNParams):
   def __init__(self, num_env_props, *args, q_loss_scale=10, spec_encoding_hidden_size=64, violation_weighting_alpha=0.25, **kwargs):
     super().__init__(*args, **kwargs)
     self.num_props = num_env_props
@@ -43,8 +43,8 @@ class SpecEncoder(nn.Module):
     return hiddens.sum(dim=0)
 
 
-class DDQNL(Agent):
-  def __init__(self, state_size, action_size, spec_encoding_size, params: SafetyDDQNParams) -> None:
+class DDQNLAgent(Agent):
+  def __init__(self, state_size, action_size, spec_encoding_size, params: DDQNLParams) -> None:
     super().__init__()
 
     self.state_size = state_size
