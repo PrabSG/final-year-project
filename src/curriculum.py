@@ -1,15 +1,17 @@
+from typing import Optional
+
 import numpy as np
 
 class RootPDistShiftScheduler:
   def __init__(self, num_categories: int, t_grow: int, sharpness_delta: int,
-               init_weights: np.ndarray, final_weights: np.ndarray,
-               category_difficulties: np.ndarray):
+               category_difficulties: np.ndarray, init_weights: Optional[np.ndarray] = None,
+               final_weights: Optional[np.ndarray] = None):
     self._b = num_categories
-    self._w0 = init_weights
-    self._wT = final_weights
     self._t_grow = t_grow
     self._delta = sharpness_delta
     self._ds = category_difficulties
+    self._w0 = init_weights if init_weights is not None else np.ones(num_categories)
+    self._wT = final_weights if final_weights is not None else np.ones(num_categories)
     # Calculated terms
     self._ps = self._delta ** self._ds
     self._lambda_0s = self._lambda_0()
