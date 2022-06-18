@@ -289,7 +289,18 @@ class UnsafeCrossingEnv(MiniGridEnv):
 
 class UnsafeCrossingSimpleEnv(UnsafeCrossingEnv):
   def __init__(self, **kwargs):
-    super().__init__(num_crossings=1, obstacle_types=["lava"], grid_size=5, random_crossing=False, agent_view_size=5, no_safe_obstacle=True, **kwargs)
+    super().__init__(
+      num_crossings=1,
+      obstacle_types=["lava"],
+      grid_size=5,
+      random_crossing=False,
+      agent_view_size=5,
+      no_safe_obstacle=True,
+      safety_spec=(
+        "until",
+        ("not", SAFETY_PROPS_TO_SYMBOLS["touching_lava"]),
+        SAFETY_PROPS_TO_SYMBOLS["reach_goal"]),
+      **kwargs)
 
 class UnsafeCrossingMicroEnv(UnsafeCrossingEnv):
   def __init__(self, **kwargs):
