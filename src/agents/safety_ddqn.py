@@ -192,7 +192,15 @@ class SafetyDDQNAgent(Agent):
       "vio_losses": [],
       "recon_losses": [],
       "cum_num_violations": [],
-      "steps": []
+      "steps": [],
+      "metric_titles": {
+        "episode_rewards": "Total Training Episode Reward",
+        "train_losses": "Loss Function",
+        "q_losses": "TD-Learning Loss",
+        "vio_losses": "Violation Prediction Loss",
+        "recon_losses": "LTL Reconstruction Loss",
+        "cum_num_violations": "Cumulative Number of Violations"
+      }
     }
   
   def _idx_to_one_hot(self, idx, max_idx):
@@ -411,10 +419,10 @@ class SafetyDDQNAgent(Agent):
       safety_rnn_state = None
       episode_transitions = []
 
-      self.metrics["train_losses"].append(0)
-      self.metrics["q_losses"].append(0)
-      self.metrics["vio_losses"].append(0)
-      self.metrics["recon_losses"].append(0)
+      train_loss_ep = 0
+      q_loss_ep = 0
+      vio_loss_ep = 0
+      recon_loss_ep = 0
 
       for t in range(self.params.max_episode_len):
         with torch.no_grad():
@@ -434,10 +442,10 @@ class SafetyDDQNAgent(Agent):
         loss = self._optimize_model()
         if loss is not None:
           q_loss, vio_loss, recon_loss = loss
-          self.metrics["train_losses"][-1] += q_loss + vio_loss + recon_loss
-          self.metrics["q_losses"][-1] += q_loss
-          self.metrics["vio_losses"][-1] += vio_loss
-          self.metrics["recon_losses"][-1] += recon_loss
+          train_loss_ep += q_loss + vio_loss + recon_loss
+          q_loss_ep += q_loss
+          vio_loss_ep += vio_loss
+          recon_loss_ep += recon_loss
 
           optimize_steps += 1
           if optimize_steps % self.params.update_steps == 0:
@@ -456,22 +464,26 @@ class SafetyDDQNAgent(Agent):
       self.metrics["steps"].append(t+1 + (0 if len(self.metrics["steps"]) == 0 else self.metrics["steps"][-1]))
       self.metrics["episode_rewards"].append(total_reward)
       self.metrics["cum_num_violations"].append(num_violations + (0 if len(self.metrics["cum_num_violations"]) == 0 else self.metrics["cum_num_violations"][-1]))
+      self.metrics["train_losses"].append(train_loss_ep / t)
+      self.metrics["q_losses"].append(q_loss_ep / t)
+      self.metrics["vio_losses"].append(vio_loss_ep / t)
+      self.metrics["recon_losses"].append(recon_loss_ep / t)
 
       if print_logging and (i_episode+1) % 5 == 0:
         print(f"Episode reward: {total_reward}")
 
       if writer is not None:
         writer.add_scalar("train_reward", self.metrics["episode_rewards"][-1], self.metrics["steps"][-1])
-        writer.add_scalar("opt_steps/train_loss", self.metrics["train_losses"][-1] / t, self.metrics["steps"][-1])
-        writer.add_scalar("opt_steps/q_loss", self.metrics["q_losses"][-1] / t, self.metrics["steps"][-1])
-        writer.add_scalar("opt_steps/vio_loss", self.metrics["vio_losses"][-1] / t, self.metrics["steps"][-1])
-        writer.add_scalar("opt_steps/recon_loss", self.metrics["recon_losses"][-1] / t, self.metrics["steps"][-1])
+        writer.add_scalar("opt_steps/train_loss", self.metrics["train_losses"][-1], self.metrics["steps"][-1])
+        writer.add_scalar("opt_steps/q_loss", self.metrics["q_losses"][-1], self.metrics["steps"][-1])
+        writer.add_scalar("opt_steps/vio_loss", self.metrics["vio_losses"][-1], self.metrics["steps"][-1])
+        writer.add_scalar("opt_steps/recon_loss", self.metrics["recon_losses"][-1], self.metrics["steps"][-1])
         writer.add_scalar("episodic/train_reward", self.metrics["episode_rewards"][-1], i_episode)
         writer.add_scalar("episodic/cum_num_violations", self.metrics["cum_num_violations"][-1], i_episode)
-        writer.add_scalar("episodic/train_loss", self.metrics["train_losses"][-1] / t, i_episode)
-        writer.add_scalar("episodic/q_loss", self.metrics["q_losses"][-1] / t, i_episode)
-        writer.add_scalar("episodic/vio_loss", self.metrics["vio_losses"][-1] / t, i_episode)
-        writer.add_scalar("episodic/recon_loss", self.metrics["recon_losses"][-1] / t, i_episode)
+        writer.add_scalar("episodic/train_loss", self.metrics["train_losses"][-1], i_episode)
+        writer.add_scalar("episodic/q_loss", self.metrics["q_losses"][-1], i_episode)
+        writer.add_scalar("episodic/vio_loss", self.metrics["vio_losses"][-1], i_episode)
+        writer.add_scalar("episodic/recon_loss", self.metrics["recon_losses"][-1], i_episode)
     
     env.close()
     return self.metrics

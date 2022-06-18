@@ -11,7 +11,7 @@ import numpy as np
 from envs.env import BasicEnv, MiniGridEnvWrapper
 from envs.safe_env import MiniGridSafetyEnv
 
-cols = [('mediumpurple', 'indigo'), ('palegreen', 'seagreen'), ('lightcoral', 'firebrick'), ('navajowhite', 'darkorange'), ('lightskyblue', 'deepskyblue'), ('lightgoldenrodyellow', 'gold'), ('whitesmoke', 'darkgrey'), ('pink', 'magenta')]
+cols = [('lightskyblue', 'deepskyblue'),  ('navajowhite', 'darkorange'), ('palegreen', 'seagreen'), ('mediumpurple', 'indigo'), ('lightcoral', 'firebrick'), ('lightgoldenrodyellow', 'gold'), ('whitesmoke', 'darkgrey'), ('pink', 'magenta')]
 
 class DimensionError(IndexError):
   def __init__(self, expected, given, *args: object) -> None:
@@ -68,7 +68,7 @@ def visualise_agent(env, agent, args, episode=None):
   write_gif(np.array(frames), args.results_dir + filename, fps=1/0.1)
   print("Done.")
 
-def plot_agent_variants(all_metrics: List[List[Dict]], variant_labels: List[str], fields: List[str], save_dir: str):
+def plot_agent_variants(all_metrics: List[List[Dict]], variant_labels: List[str], fields: List[str], ylabels: Dict[str, str], save_dir: str):
   for field in fields:
     for variant in range(len(variant_labels)):
       num_agents = len(all_metrics[variant])
@@ -80,13 +80,14 @@ def plot_agent_variants(all_metrics: List[List[Dict]], variant_labels: List[str]
       data_mean = np.mean(np_data, axis=0)
       data_std = np.std(np_data, axis=0)
 
-      plt.fill_between(range(len(data_mean)), data_mean + data_std, data_mean - data_std, color=cols[0][0], alpha=0.5)
-      plt.plot(data_mean, color=cols[0][1], label=variant_labels[variant])
+      plt.fill_between(range(len(data_mean)), data_mean + data_std, data_mean - data_std, color=cols[variant][0], alpha=0.5)
+      plt.plot(data_mean, color=cols[variant][1], label=variant_labels[variant])
 
     plt.xlabel("Episodes")
-    plt.ylabel("Total Episodic Reward")
+    plt.ylabel(ylabels[field])
     plt.grid()
-    plt.legend(loc="lower right")
+    if variant_labels[variant] is not None:
+      plt.legend(loc="lower right")
     plt.savefig(save_dir + f"/{field}_plot.pgf", format="pgf")
     plt.close()
 
