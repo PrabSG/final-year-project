@@ -23,7 +23,7 @@ SafetyTransition = namedtuple("SafetyTransition", ("state", "safety_spec", "acti
 SafetyState = namedtuple("SafetyState", ["env_state", "formula"])
 
 class SafetyDDQNParams(DDQNParams):
-  def __init__(self, num_env_props, *args, q_loss_scale=10, vio_loss_scale=1, recon_loss_scale=0.1, spec_encoding_hidden_size=64, rnn_hidden_size=64, violation_threshold=0.5, chunk_size=4, **kwargs):
+  def __init__(self, num_env_props, *args, q_loss_scale=10, vio_loss_scale=1, recon_loss_scale=0.1, spec_encoding_hidden_size=64, rnn_hidden_size=64, violation_threshold=0.5, chunk_size=4, violation_weighting_alpha=0.25, **kwargs):
     super().__init__(*args, **kwargs)
     self.num_props = num_env_props
     self.q_loss_scale = q_loss_scale
@@ -33,6 +33,7 @@ class SafetyDDQNParams(DDQNParams):
     self.rnn_hidden_size = rnn_hidden_size
     self.violation_threshold = violation_threshold
     self.chunk_size = chunk_size
+    self.violation_weighting_alpha = violation_weighting_alpha
 
 
 class SpecEncoder(nn.Module):
@@ -354,7 +355,14 @@ class SafetyDDQNAgent(Agent):
       p_violation, pred_prog_spec, safety_rnn_state = self._safety_rnn(
         encoded_specs, encoded_state, action_batch, hidden_state=safety_rnn_state)
       
-      violation_loss += F.binary_cross_entropy(p_violation, violation, reduction="mean")
+      class_weightings = torch.tensor(
+        [self.params.violation_weighting_alpha, 1 - self.params.violation_weighting_alpha],
+        device=self.params.device, dtype=torch.float)
+      sample_weightings = class_weightings[violation.data.view(-1).long()].view_as(violation)
+
+      bce = F.binary_cross_entropy(p_violation, violation, reduction="none")
+      weighted_bce = bce * sample_weightings
+      violation_loss += torch.mean(weighted_bce)
 
       # Calculate Reconstructed Spec Loss
 
