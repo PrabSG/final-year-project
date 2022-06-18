@@ -110,8 +110,9 @@ if __name__ == "__main__":
       with open(args.results_dir + f"/metrics_{args.num_agents}_agents.pickle", "wb") as f:
         pickle.dump(agent_metrics, f)
     
-    fields = list(agent_metrics[0].keys() - {"steps"})
-    plot_agent_variants([agent_metrics], [None], fields, args.results_dir)
+    ylabels = agent_metrics[0]["metric_titles"]
+    fields = list(agent_metrics[0].keys() - {"steps", "episodes", "metric_titles"})
+    plot_agent_variants([agent_metrics], [None], fields, ylabels, args.results_dir)
 
   else:
     summary_name = results_dir + "/{}_{}_log"

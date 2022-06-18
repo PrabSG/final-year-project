@@ -150,7 +150,18 @@ class LatentShieldedDreamer(Agent):
     self.metrics = {
       'steps': [], 'episodes': [], 'train_rewards': [], 'test_episodes': [], 'test_rewards': [],
       'observation_loss': [], 'reward_loss': [], 'kl_loss': [], 'actor_loss': [], 'value_loss': [],
-      'violation_loss': [], 'cum_num_violations': []
+      'violation_loss': [], 'cum_num_violations': [],
+      'metric_titles': {
+        'train_rewards': 'Total Training Episode Reward',
+        'test_rewards': 'Total Testing Episode Reward',
+        'observation_loss': 'Observation Loss',
+        'reward_loss': 'Reward Loss',
+        'kl_loss': 'KL Divergence',
+        'actor_loss': 'Actor Loss',
+        'value_loss': 'Value Critic Loss',
+        'violation_loss': 'Violation Loss',
+        'cum_num_violations': 'Cumulative Number of Violations'
+      }
     }
 
     # Initialise epsilon for linear decay
@@ -385,9 +396,9 @@ class LatentShieldedDreamer(Agent):
     self.metrics['steps'].append(t + self.metrics['steps'][-1])
     self.metrics['episodes'].append(episode)
     self.metrics['train_rewards'].append(total_reward)
-    self.metrics['cum_num_violations'].append((episode, self.metrics['cum_num_violations'][-1] + violations))
-    lineplot(self.metrics['episodes'][-len(self.metrics['train_rewards']):], self.metrics['train_rewards'], 'train_rewards', self.params.results_dir)
-    lineplot([x for x, y in self.metrics['cum_num_violations']], [y for x, y in self.metrics['cum_num_violations']], 'cum_num_violations', self.params.results_dir)
+    self.metrics['cum_num_violations'].append(self.metrics['cum_num_violations'][-1] + violations)
+    # lineplot(self.metrics['episodes'][-len(self.metrics['train_rewards']):], self.metrics['train_rewards'], 'train_rewards', self.params.results_dir)
+    # lineplot([x for x, y in self.metrics['cum_num_violations']], [y for x, y in self.metrics['cum_num_violations']], 'cum_num_violations', self.params.results_dir)
 
   def _test_agent(self, env, episode):
 
@@ -421,9 +432,15 @@ class LatentShieldedDreamer(Agent):
         self.D.append(observation, action, reward, violation, done)
         observation = next_observation
         t += 1
-      self.metrics['cum_num_violations'].append((s, self.metrics['cum_num_violations'][-1] + violation_count))
+      self.metrics['cum_num_violations'].append(self.metrics['cum_num_violations'][-1] + violation_count)
       self.metrics['steps'].append(t * self.params.action_repeat + (0 if len(self.metrics['steps']) == 0 else self.metrics['steps'][-1]))
       self.metrics['episodes'].append(s)
+      self.metrics['observation_loss'].append(0)
+      self.metrics['reward_loss'].append(0)
+      self.metrics['kl_loss'].append(0)
+      self.metrics['actor_loss'].append(0)
+      self.metrics['value_loss'].append(0)
+      self.metrics['violation_loss'].append(0)
     
     self.train_mode()
 
@@ -476,14 +493,23 @@ class LatentShieldedDreamer(Agent):
       if writer is not None:
         writer.add_scalar("train_reward", self.metrics['train_rewards'][-1], self.metrics['steps'][-1])
         writer.add_scalar("train/episode_reward", self.metrics['train_rewards'][-1], self.metrics['steps'][-1] * self.params.action_repeat)
-        writer.add_scalar("episodic/cum_num_violations", self.metrics["cum_num_violations"][-1][1], episode)
+        # Episodic plotting
+        writer.add_scalar("episodic/train_reward", self.metrics["train_rewards"][-1], episode)
+        writer.add_scalar("episodic/cum_num_violations", self.metrics["cum_num_violations"][-1], episode)
+        writer.add_scalar("episodic/observation_loss", self.metrics["observation_loss"][-1], episode)
+        writer.add_scalar("episodic/reward_loss", self.metrics['reward_loss'][-1], episode)
+        writer.add_scalar("episodic/kl_loss", self.metrics['kl_loss'][-1], episode)
+        writer.add_scalar("episodic/actor_loss", self.metrics['actor_loss'][-1], episode)
+        writer.add_scalar("episodic/value_loss", self.metrics['value_loss'][-1], episode)
+        writer.add_scalar("episodic/violation_loss", self.metrics["violation_loss"][-1], episode)
+        # Num optimisation step plotting
         writer.add_scalar("opt_steps/observation_loss", self.metrics['observation_loss'][-1], self.metrics['steps'][-1])
         writer.add_scalar("opt_steps/reward_loss", self.metrics['reward_loss'][-1], self.metrics['steps'][-1])
         writer.add_scalar("opt_steps/kl_loss", self.metrics['kl_loss'][-1], self.metrics['steps'][-1])
         writer.add_scalar("opt_steps/actor_loss", self.metrics['actor_loss'][-1], self.metrics['steps'][-1])
         writer.add_scalar("opt_steps/value_loss", self.metrics['value_loss'][-1], self.metrics['steps'][-1])
         writer.add_scalar("opt_steps/violation_loss", self.metrics["violation_loss"][-1], self.metrics["steps"][-1])
-      print("episodes: {}, total_steps: {}, train_reward: {}, total_violations: {} ".format(self.metrics['episodes'][-1], self.metrics['steps'][-1], self.metrics['train_rewards'][-1], self.metrics['cum_num_violations'][-1][1]))
+      print("episodes: {}, total_steps: {}, train_reward: {}, total_violations: {} ".format(self.metrics['episodes'][-1], self.metrics['steps'][-1], self.metrics['train_rewards'][-1], self.metrics['cum_num_violations'][-1]))
 
       # Checkpoint models
       if episode % self.params.checkpoint_interval == 0:
