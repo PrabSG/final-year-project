@@ -70,7 +70,7 @@ def visualise_agent(env, agent, args, episode=None):
 
 def plot_agent_variants(all_metrics: List[List[Dict]], variant_labels: List[str], fields: List[str], ylabels: Dict[str, str], save_dir: str):
   for field in fields:
-    plt.figure(figsize=(6, 4))
+    plt.figure(figsize=(6, 5))
     plt.rcParams.update({'font.size': 14})
 
     for variant in range(len(variant_labels)):

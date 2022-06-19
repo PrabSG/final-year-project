@@ -123,7 +123,7 @@ if __name__ == "__main__":
         pickle.dump(agent_metrics, f)
     
     ylabels = agent_metrics[0]["metric_titles"]
-    fields = list(agent_metrics[0].keys() - {"steps", "episodes", "metric_titles"})
+    fields = list(agent_metrics[0].keys() - {"steps", "episodes", "metric_titles", "test_episodes"})
     plot_agent_variants([agent_metrics], [None], fields, ylabels, args.results_dir)
 
   else:
