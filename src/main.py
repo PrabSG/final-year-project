@@ -1,6 +1,8 @@
 import argparse
 import os
 import pickle
+import random
+import sys
 
 import numpy as np
 import torch
@@ -111,6 +113,10 @@ if __name__ == "__main__":
       print(f"Training Agent {n+1}...")
       metrics = train_agent(env, agent, args)
       agent_metrics.append(metrics)
+
+      # Progress to new seed or environments will be the same order of configs each time
+      random.seed(args.seed)
+      args.seed = random.randrange(sys.maxsize)
 
     if args.save_metrics:
       with open(args.results_dir + f"/metrics_{args.num_agents}_agents.pickle", "wb") as f:
