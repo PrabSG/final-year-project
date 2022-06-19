@@ -146,11 +146,11 @@ class SafetyRNN(nn.Module):
     prog_spec = self.spec_progressor(torch.cat((encoded_spec, new_hidden), dim=1))
     return p_violation, prog_spec, new_hidden
 
-class ConditionalAdaptiveShield(nn.Module):
+class ConditionalAdaptiveShieldHidden(nn.Module):
   def __init__(self, spec_size, obs_size, action_size, truth_hidden_size, hidden_size=64) -> None:
     super().__init__()
     self.hidden_size = hidden_size
-    self.rnn = nn.GRUCell(spec_size + obs_size, hidden_size)
+    self.rnn = nn.GRUCell(spec_size + truth_hidden_size, hidden_size)
     self.truth_predictor = nn.Sequential(
       nn.Linear(obs_size + action_size, 64),
       nn.ReLU(),
@@ -205,6 +205,49 @@ class ConditionalAdaptiveShield(nn.Module):
     return p_violation, prog_spec, new_hidden
 
 
+class ConditionalAdaptiveShield(nn.Module):
+  def __init__(self, spec_size, obs_size, action_size, truth_hidden_size) -> None:
+    super().__init__()
+    self.rnn = nn.GRUCell(truth_hidden_size, spec_size)
+    self.truth_predictor = nn.Sequential(
+      nn.Linear(obs_size + action_size, 64),
+      nn.ReLU(),
+      nn.Linear(64, 128),
+      nn.ReLU(),
+      nn.Linear(128, truth_hidden_size)
+    )
+
+    self.violation_predictor = nn.Sequential(
+      nn.Linear(truth_hidden_size + spec_size, 128),
+      nn.ReLU(),
+      nn.Linear(128, 64),
+      nn.ReLU(),
+      nn.Linear(64, 32),
+      nn.ReLU(),
+      nn.Linear(32, 1),
+      nn.Sigmoid()
+    )
+  
+  def forward(self, encoded_spec, encoded_obs, action):
+    """
+    Inputs:
+      - encoded_spec: (batch_size, 2 * spec_hidden_size)
+      - encoded_obs: (batch_size, encoding_size)
+      - action: (batch_size, action_size)
+
+    Outputs:
+      - p_violation: (batch_size, 1)
+      - prog_spec: (batch_size, 2 * spec_hidden_size)
+    """
+    curr_state = torch.cat((encoded_obs, action), dim=1)
+    batch_size = curr_state.shape[0]
+    approx_truth = self.truth_predictor(curr_state)
+
+    p_violation = self.violation_predictor(torch.cat((encoded_spec, approx_truth), dim=1))
+    prog_spec = self.rnn(approx_truth, encoded_spec)
+    return p_violation, prog_spec
+
+
 class SafetyDDQNAgent(Agent):
   def __init__(self, state_size, action_size, spec_encoding_size, params: SafetyDDQNParams) -> None:
     super().__init__()
@@ -232,7 +275,8 @@ class SafetyDDQNAgent(Agent):
     self._spec_encoder = SpecEncoder(spec_encoding_size, params.spec_hidden_size).to(device=params.device)
     self._spec_decoder = SpecDecoder(2 * params.spec_hidden_size, spec_encoding_size, params.num_props).to(device=params.device)
     # self._safety_rnn = SafetyRNN(2 * params.spec_hidden_size, input_shape, self.action_size, params.rnn_hidden_size).to(device=params.device)
-    self._ca_shield = ConditionalAdaptiveShield(2 * params.spec_hidden_size, input_shape, self.action_size, input_shape, hidden_size=params.rnn_hidden_size).to(device=params.device)
+    # self._ca_shield = ConditionalAdaptiveShield(2 * params.spec_hidden_size, input_shape, self.action_size, input_shape, hidden_size=params.rnn_hidden_size).to(device=params.device)
+    self._ca_shield = ConditionalAdaptiveShield(2 * params.spec_hidden_size, input_shape, self.action_size, input_shape).to(device=params.device)
     self._policy_net = QModel(input_shape + (2 * params.spec_hidden_size), self.action_size, params.nn_sizes).to(params.device)
     self._target_net = QModel(input_shape + (2 * params.spec_hidden_size), self.action_size, params.nn_sizes).to(params.device)
     self._target_net.load_state_dict(self._policy_net.state_dict())
@@ -278,7 +322,8 @@ class SafetyDDQNAgent(Agent):
     a[0, max_idx] = 1
     return a
 
-  def _get_safe_action(self, state: SafetyState, rnn_state: Optional[torch.Tensor] = None, eps=0):
+  # def _get_safe_action(self, state: SafetyState, rnn_state: Optional[torch.Tensor] = None, eps=0):
+  def _get_safe_action(self, state: SafetyState, eps=0):
     act_randomly = False
     
     if eps > 0:
@@ -299,14 +344,17 @@ class SafetyDDQNAgent(Agent):
 
         for i in range(self.action_size):
           proposed_action = self._idx_to_one_hot(best_action_idxs[i], self.action_size)
-          p_violation, prog_spec, new_rnn_state = self._ca_shield(encoded_formula, encoded_state, proposed_action, hidden_state=rnn_state)
+          # p_violation, prog_spec, new_rnn_state = self._ca_shield(encoded_formula, encoded_state, proposed_action, hidden_state=rnn_state)
+          p_violation, prog_spec = self._ca_shield(encoded_formula, encoded_state, proposed_action)
           if p_violation < self.params.violation_threshold:
-            return proposed_action, prog_spec, new_rnn_state
+            # return proposed_action, prog_spec, new_rnn_state
+            return proposed_action, prog_spec
       
       # No safe actions or epsilon exploration so act randomly
       rand_action = self._idx_to_one_hot(random.randrange(self.action_size), self.action_size)
-      _, prog_spec, new_rnn_state = self._ca_shield(encoded_formula, encoded_state, rand_action, hidden_state=rnn_state)
-      return rand_action, prog_spec, new_rnn_state
+      # _, prog_spec, new_rnn_state = self._ca_shield(encoded_formula, encoded_state, rand_action, hidden_state=rnn_state)
+      _, prog_spec = self._ca_shield(encoded_formula, encoded_state, rand_action)
+      return rand_action, prog_spec
 
   def _get_action(self, state, eps=0):
     if eps > 0:
@@ -398,7 +446,7 @@ class SafetyDDQNAgent(Agent):
 
     violation_loss = 0
     recon_loss = 0
-    safety_rnn_state = torch.zeros((self.params.batch_size // self.params.chunk_size, self.params.rnn_hidden_size), device=self.params.device)
+    # safety_rnn_state = torch.zeros((self.params.batch_size // self.params.chunk_size, self.params.rnn_hidden_size), device=self.params.device)
 
     for step in range(self.params.chunk_size):
       chunk_batches = SafetyTransition(*zip(*chunks_by_seq[step]))
@@ -415,9 +463,10 @@ class SafetyDDQNAgent(Agent):
       else:
         encoded_state = state_batch
 
-      p_violation, pred_prog_spec, safety_rnn_state = self._ca_shield(
-        encoded_specs, encoded_state, action_batch, hidden_state=safety_rnn_state)
-      
+      # p_violation, pred_prog_spec, safety_rnn_state = self._ca_shield(
+      #   encoded_specs, encoded_state, action_batch, hidden_state=safety_rnn_state)
+      p_violation, pred_prog_spec = self._ca_shield(encoded_specs, encoded_state, action_batch)
+
       class_weightings = torch.tensor(
         [self.params.violation_weighting_alpha, 1 - self.params.violation_weighting_alpha],
         device=self.params.device, dtype=torch.float)
@@ -487,7 +536,7 @@ class SafetyDDQNAgent(Agent):
       num_violations = 0
       state = env.get_observation().unsqueeze(0).to(self.params.device)
       comb_state = SafetyState(state, safety_spec.unsqueeze(1))
-      safety_rnn_state = None
+      # safety_rnn_state = None
       episode_transitions = []
 
       train_loss_ep = 0
@@ -498,7 +547,8 @@ class SafetyDDQNAgent(Agent):
       for t in range(self.params.max_episode_len):
         with torch.no_grad():
           eps = self.params.eps_func(i_episode)
-          action, _, safety_rnn_state  = self._get_safe_action(comb_state, rnn_state=safety_rnn_state, eps=eps)
+          # action, _, safety_rnn_state  = self._get_safe_action(comb_state, rnn_state=safety_rnn_state, eps=eps)
+          action, _  = self._get_safe_action(comb_state, eps=eps)
 
           next_state, reward, done, info = env.step(action.squeeze().detach().cpu())
           total_reward += reward
