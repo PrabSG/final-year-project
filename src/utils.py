@@ -80,8 +80,16 @@ def plot_agent_variants(all_metrics: List[List[Dict]], variant_labels: List[str]
       data_mean = np.mean(np_data, axis=0)
       data_std = np.std(np_data, axis=0)
 
-      plt.fill_between(range(len(data_mean)), data_mean + data_std, data_mean - data_std, color=cols[variant][0], alpha=0.5)
+      # Clamp max_reward as 1
+      upper_vals = np.min([np.ones(data_mean.shape[0]), data_mean + data_std], axis=0) if "rewards" in field else data_mean + data_std
+
+      plt.fill_between(range(len(data_mean)), upper_vals, data_mean - data_std, color=cols[variant][0], alpha=0.5)
       plt.plot(data_mean, color=cols[variant][1], label=variant_labels[variant])
+
+    if "rewards" in field:
+      plt.ylim(top=2.0)
+    if "loss" in field:
+      plt.ylim(bottom=0.0)
 
     plt.xlabel("Episodes")
     plt.ylabel(ylabels[field])
@@ -106,6 +114,7 @@ if __name__ == "__main__":
       print("Loading metrics file...")
       agent_metrics = pickle.load(f)
 
-    fields = list(agent_metrics[0].keys() - {"steps"})
+    ylabels = agent_metrics[0]["metric_titles"]
+    fields = list(agent_metrics[0].keys() - {"steps", "episodes", "metric_titles"})
     print("Plotting...")
-    plot_agent_variants([agent_metrics], [None], fields, args.results_dir)
+    plot_agent_variants([agent_metrics], [None], fields, ylabels, args.results_dir)
