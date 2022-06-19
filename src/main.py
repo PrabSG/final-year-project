@@ -46,7 +46,7 @@ def init_agent(agent_type, env, args):
       args, args.results_dir, episodes=args.train_episodes, test=True, test_interval=25,
       test_episodes=5, max_episode_length=args.max_episode_length, embedding_size=256,
       vis_freq=args.vis_freq, seed_episodes=args.seed_episodes, planning_horizon=5, belief_size=200,
-      state_size=30, eps_decay=args.eps_decay, worldmodel_LogProbLoss=True,
+      state_size=30, eps_decay=args.eps_decay, worldmodel_LogProbLoss=True, algo="MPC"
       device=device)
     return LatentShieldedDreamer(params, env)
   else:
