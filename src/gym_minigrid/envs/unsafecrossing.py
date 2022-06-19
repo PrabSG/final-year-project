@@ -1,6 +1,8 @@
+from array import array
 from math import sqrt
 import re
 from typing import Dict
+from curriculum import RootPDistShiftScheduler
 from gym_minigrid import minigrid
 from gym_minigrid.minigrid import *
 from gym_minigrid.register import register
@@ -8,10 +10,11 @@ from safety.condition import AvoidRequirement, SafetyRequirement, UntilRequireme
 
 DEF_MAX_EPISODE_LENGTH = 50
 DEF_CURRICULUM_EQ_EPS = 100
+NUM_SPEC_CATEGORIES = 3
 
 # Reward Values
 GOAL_REWARD = 1
-NO_MOVE_REWARD = - 0.1
+NO_MOVE_REWARD = - 0.02
 DEFAULT_REWARD = -0.01
 
 SAFETY_PROPS_TO_SYMBOLS = {
@@ -62,6 +65,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
     no_safe_obstacle=False,
     safety_spec="random",
     curriculum_equality_episodes=100,
+    curriculum_delta=2,
     **kwargs
   ):
     self.num_crossings = num_crossings
@@ -90,6 +94,12 @@ class UnsafeCrossingEnv(MiniGridEnv):
     self.randomized_safety_spec = safety_spec == "random"
     self.curriculum_eq_eps = curriculum_equality_episodes
     self._num_episodes = 0 # Used for curriculum learning
+    self.curriculum_scheduler = RootPDistShiftScheduler(
+      NUM_SPEC_CATEGORIES, curriculum_equality_episodes, curriculum_delta,
+      category_difficulties=np.array([1.0, 0.5, 0.0]),
+      init_weights=np.array([1.0, 0.5, 0.25]),
+      final_weights=np.array([1.0, 1.0, 1.0]),
+    )
 
     # Have to set seed here to use random functions
     self.seed(seed=seed)
@@ -202,6 +212,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
 
   def _get_config_weighting(self):
     """
+    Deprecated for RootPDistShiftScheduler. See curriculum.py.
     Use curriculum learning to weight chances of picking each difficulty of specification, so that
     start at more easier examples, end at point where all equally distributed.
     
@@ -226,7 +237,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
     to_avoid = set(["lava"])
     required = set()
     
-    w_one, w_two, w_until = self._get_config_weighting()
+    w_one, w_two, w_until = self.curriculum_scheduler.get_probabilities(self._num_episodes)
     sampled = self._rand_float(0, 1.0)
 
     if sampled < w_one: # One avoid spec
