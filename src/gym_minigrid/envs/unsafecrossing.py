@@ -96,7 +96,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
     self._num_episodes = 0 # Used for curriculum learning
     self.curriculum_scheduler = RootPDistShiftScheduler(
       NUM_SPEC_CATEGORIES, curriculum_equality_episodes, curriculum_delta,
-      category_difficulties=np.array([1.0, 0.5, 0.0])
+      category_difficulties=np.array([1.0, 0.5, 0.0]),
       init_weights=np.array([1.0, 0.5, 0.25]),
       final_weights=np.array([1.0, 1.0, 1.0]),
     )
