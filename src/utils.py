@@ -70,8 +70,8 @@ def visualise_agent(env, agent, args, episode=None):
 
 def plot_agent_variants(all_metrics: List[List[Dict]], variant_labels: List[str], fields: List[str], ylabels: Dict[str, str], save_dir: str):
   for field in fields:
-    plt.figure(figsize=(6, 5))
-    plt.rcParams.update({'font.size': 14})
+    plt.figure(figsize=(8, 5))
+    plt.rcParams.update({'font.size': 16})
 
     for variant in range(len(variant_labels)):
       num_agents = len(all_metrics[variant])
@@ -93,6 +93,8 @@ def plot_agent_variants(all_metrics: List[List[Dict]], variant_labels: List[str]
       plt.ylim(top=2.0)
     if "loss" in field:
       plt.ylim(bottom=0.0)
+    if "kl" in field or "observation" in field:
+      plt.ylim(top=100.0)
 
     plt.xlabel("Episodes")
     plt.ylabel(ylabels[field])
