@@ -99,8 +99,8 @@ def plot_agent_variants(all_metrics: List[List[Dict]], variant_labels: List[str]
     plt.xlabel("Episodes")
     plt.ylabel(ylabels[field])
     plt.grid()
-    if variant_labels[variant] is not None:
-      plt.legend(loc="lower right")
+    if variant_labels[0] is not None:
+      plt.legend()
     plt.savefig(save_dir + f"/{field}_plot.pgf", format="pgf")
     plt.close()
 
@@ -110,6 +110,9 @@ if __name__ == "__main__":
   # Plotting options
   parser.add_argument("--plot", action="store_true", help="Plot results into a pgf")
   parser.add_argument("--load-metrics", type=str, help="Pickle file location for metrics")
+  parser.add_argument("--variant-metrics", type=str, help="Pickle file location of comparison metrics")
+  parser.add_argument("--main-method-name", type=str)
+  parser.add_argument("--variant-name", type=str)
   parser.add_argument("--results-dir", type=str, help="Location to save plots")
 
   args = parser.parse_args()
@@ -119,7 +122,18 @@ if __name__ == "__main__":
       print("Loading metrics file...")
       agent_metrics = pickle.load(f)
 
-    ylabels = agent_metrics[0]["metric_titles"]
-    fields = list(agent_metrics[0].keys() - {"steps", "episodes", "metric_titles", "test_episodes", "test_rewards"})
-    print("Plotting...")
-    plot_agent_variants([agent_metrics], [None], fields, ylabels, args.results_dir)
+    if args.variant_metrics is not None and args.main_method_name is not None and args.variant_name is not None:
+      with open(args.variant_metrics, "rb") as vf:
+        print("Loading variant metrics file...")
+        variant_metrics = pickle.load(vf)
+
+      ylabels = agent_metrics[0]["metric_titles"]
+      main_fields = (agent_metrics[0].keys() - {"steps", "episodes", "metric_titles", "test_episodes", "test_rewards"})
+      common_fields = main_fields.intersection(variant_metrics[0].keys())
+      print("Plotting...")
+      plot_agent_variants([agent_metrics, variant_metrics], [args.main_method_name, args.variant_name], common_fields, ylabels, args.results_dir)
+    else:
+      ylabels = agent_metrics[0]["metric_titles"]
+      fields = list(agent_metrics[0].keys() - {"steps", "episodes", "metric_titles", "test_episodes", "test_rewards"})
+      print("Plotting...")
+      plot_agent_variants([agent_metrics], [None], fields, ylabels, args.results_dir)
