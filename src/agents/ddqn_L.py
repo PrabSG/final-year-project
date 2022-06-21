@@ -241,7 +241,7 @@ class DDQNLAgent(Agent):
           total_reward += reward
           next_state = next_state.unsqueeze(0).to(self.params.device)
           reward = torch.tensor([reward], device=self.params.device, dtype=torch.float)
-          violation = info["violation"]
+          violation = info["violation"] if "violation" in info else False
           num_violations += 1 if violation else 0
           prog_safety_spec = get_one_hot_spec(safety_spec_to_str(info["prog_formula"]), env.get_num_props()).to(device=self.params.device)
 
@@ -276,7 +276,7 @@ class DDQNLAgent(Agent):
         print(f"Episode reward: {total_reward}")
 
       if writer is not None:
-        writer.add_scalar("train_reward", self.metrics["episode_rewards"][-1], self.metrics["steps"][-1])
+        writer.add_scalar("opt_steps/train_reward", self.metrics["episode_rewards"][-1], self.metrics["steps"][-1])
         writer.add_scalar("opt_steps/train_loss", self.metrics["train_losses"][-1], self.metrics["steps"][-1])
         writer.add_scalar("opt_steps/q_loss", self.metrics["q_losses"][-1], self.metrics["steps"][-1])
         writer.add_scalar("episodic/train_reward", self.metrics["episode_rewards"][-1], i_episode)
