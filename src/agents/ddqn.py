@@ -235,7 +235,7 @@ class DDQNAgent(Agent):
     action_batch = torch.cat(batches.action)
     reward_batch = torch.cat(batches.reward)
     next_state_batch = torch.cat(batches.next_state)
-    non_terminal_mask = np.logical_not(np.array(batches.done))
+    non_terminal_mask = torch.logical_not(torch.tensor(batches.done))
 
     if np.sum(non_terminal_mask) > 0:
       non_terminal_next_states = next_state_batch[torch.nonzero(non_terminal_mask, as_tuple=True)]
