@@ -5,6 +5,7 @@ import itertools
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from tqdm import tqdm
 import numpy as np
 
 from agents.agent import Agent
@@ -277,7 +278,7 @@ class DDQNAgent(Agent):
     optimize_steps = 0
     
 
-    for i_episode in range(self.params.episodes):
+    for i_episode in tqdm(range(self.params.episodes)):
       if print_logging and (i_episode+1) % 5 == 0:
         print(f"Agent exploring in episode {i_episode + 1}")
       env.reset(random_start=True)
