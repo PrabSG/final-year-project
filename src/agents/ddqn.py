@@ -237,7 +237,7 @@ class DDQNAgent(Agent):
     next_state_batch = torch.cat(batches.next_state)
     non_terminal_mask = torch.logical_not(torch.tensor(batches.done))
 
-    if np.sum(non_terminal_mask) > 0:
+    if torch.sum(non_terminal_mask) > 0:
       non_terminal_next_states = next_state_batch[torch.nonzero(non_terminal_mask, as_tuple=True)]
       # non_terminal_next_states = torch.cat([next_state_batch[i].unsqueeze(dim=0) for i in range(self.params.batch_size) if non_terminal_mask[i]])
     else:
@@ -247,10 +247,10 @@ class DDQNAgent(Agent):
 
     next_state_vals = torch.zeros(self.params.batch_size, device=self.params.device)
     with torch.no_grad():
-      if np.sum(non_terminal_mask) > 0:
+      if torch.sum(non_terminal_mask) > 0:
         argmax_q_idx = self._policy_net_pass(non_terminal_next_states).argmax(1).detach()
         q_vals = self._target_net_pass(non_terminal_next_states).detach()
-        next_state_vals[non_terminal_mask] = q_vals[range(q_vals.shape[0]), argmax_q_idx]
+        next_state_vals[torch.nonzero(non_terminal_mask, as_tuple=True)] = q_vals[range(q_vals.shape[0]), argmax_q_idx]
     
     expected_qs = (next_state_vals * self.params.gamma) + reward_batch
 
