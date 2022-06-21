@@ -170,7 +170,15 @@ class DDQNAgent(Agent):
     self.metrics = {
       "episode_rewards": [],
       "train_losses": [],
-      "steps": []
+      "q_losses": [],
+      "cum_num_violations": [],
+      "steps": [],
+      "metric_titles": {
+        "episode_rewards": "Total Training Episode Reward",
+        "train_losses": "Loss Function",
+        "q_losses": "TD-Learning Loss",
+        "cum_num_violations": "Cumulative Number of Violations"
+      }
     }
   
   def _idx_to_one_hot(self, idx, max_idx):
@@ -230,9 +238,10 @@ class DDQNAgent(Agent):
     non_terminal_mask = np.logical_not(np.array(batches.done))
 
     if np.sum(non_terminal_mask) > 0:
-      non_terminal_next_states = torch.cat([next_state_batch[i].unsqueeze(dim=0) for i in range(self.params.batch_size) if non_terminal_mask[i]])
+      non_terminal_next_states = next_state_batch[torch.nonzero(non_terminal_mask, as_tuple=True)]
+      # non_terminal_next_states = torch.cat([next_state_batch[i].unsqueeze(dim=0) for i in range(self.params.batch_size) if non_terminal_mask[i]])
     else:
-      non_terminal_next_states = torch.empty(0, self.state_size)
+      non_terminal_next_states = torch.empty(0, self.state_size, device=self.params.device)
 
     state_qs = self._policy_net_pass(state_batch).gather(1, torch.argmax(action_batch, dim=1, keepdim=True))
 
@@ -274,6 +283,8 @@ class DDQNAgent(Agent):
       env.reset(random_start=True)
 
       total_reward = 0
+      num_violations = 0
+      q_loss_ep = 0
       state = env.get_observation().unsqueeze(0).to(self.params.device)
 
       self.metrics["train_losses"].append(0)
@@ -283,16 +294,17 @@ class DDQNAgent(Agent):
           eps = self.params.eps_func(i_episode)
           action = self._get_action(state, eps=eps)
 
-          next_state, reward, done, _ = env.step(action.squeeze().detach().cpu())
+          next_state, reward, done, info = env.step(action.squeeze().detach().cpu())
           total_reward += reward
           next_state = next_state.unsqueeze(0).to(self.params.device)
           reward = torch.tensor([reward], device=self.params.device, dtype=torch.float)
-
+          violation = info["violation"] if "violation" in info else False
+          num_violations += 1 if violation else 0
           self._exp_replay.add(Transition(state, action, reward, next_state, done))
 
         loss = self._optimize_model()
         if loss is not None:
-          self.metrics["train_losses"][-1] += loss
+          q_loss_ep += loss
 
           optimize_steps += 1
           if optimize_steps % self.params.update_steps == 0:
@@ -304,13 +316,21 @@ class DDQNAgent(Agent):
 
       self.metrics["steps"].append(t+1 + (0 if len(self.metrics["steps"]) == 0 else self.metrics["steps"][-1]))
       self.metrics["episode_rewards"].append(total_reward)
+      self.metrics["cum_num_violations"].append(num_violations + (0 if len(self.metrics["cum_num_violations"]) == 0 else self.metrics["cum_num_violations"][-1]))
+      self.metrics["train_losses"].append(q_loss_ep / t)
+      self.metrics["q_losses"].append(q_loss_ep / t)
       
       if print_logging and (i_episode+1) % 5 == 0:
         print(f"Episode reward: {total_reward}")
 
       if writer is not None:
-        writer.add_scalar("train_reward", self.metrics["episode_rewards"][-1], self.metrics["steps"][-1])
-        writer.add_scalar("q_loss", self.metrics["train_losses"][-1], self.metrics["steps"][-1])
+        writer.add_scalar("opt_steps/train_reward", self.metrics["episode_rewards"][-1], self.metrics["steps"][-1])
+        writer.add_scalar("opt_steps/train_loss", self.metrics["train_losses"][-1], self.metrics["steps"][-1])
+        writer.add_scalar("opt_steps/q_loss", self.metrics["q_losses"][-1], self.metrics["steps"][-1])
+        writer.add_scalar("episodic/train_reward", self.metrics["episode_rewards"][-1], i_episode)
+        writer.add_scalar("episodic/cum_num_violations", self.metrics["cum_num_violations"][-1], i_episode)
+        writer.add_scalar("episodic/train_loss", self.metrics["train_losses"][-1], i_episode)
+        writer.add_scalar("episodic/q_loss", self.metrics["q_losses"][-1], i_episode)
     
     env.close()
     return self.metrics

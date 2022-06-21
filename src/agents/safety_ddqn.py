@@ -544,9 +544,9 @@ class SafetyDDQNAgent(Agent):
       vio_loss_ep = 0
       recon_loss_ep = 0
 
+      eps = self.params.eps_func(i_episode)
       for t in range(self.params.max_episode_len):
         with torch.no_grad():
-          eps = self.params.eps_func(i_episode)
           # action, _, safety_rnn_state  = self._get_safe_action(comb_state, rnn_state=safety_rnn_state, eps=eps)
           action, _  = self._get_safe_action(comb_state, eps=eps)
 
