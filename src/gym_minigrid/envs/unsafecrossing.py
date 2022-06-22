@@ -192,7 +192,9 @@ class UnsafeCrossingEnv(MiniGridEnv):
         obstacle_types = self._safety_spec.get_avoid_objs()
 
         # Determine gap objects
-        gap_types = self._safety_spec.get_req_objs() if len(self._safety_spec.get_req_objs()) > 0 else self.safe_gap_types
+        gap_types = (self._safety_spec.get_req_objs() if
+                     len(self._safety_spec.get_req_objs()) > 0 else
+                     self.safe_gap_types - self._safety_spec.get_avoid_objs())
 
         if not self.no_safe_obstacle:
           self.put_obj(self.tile_objs[self._rand_elem(gap_types)], i, gaps[abs(0 - safe_gap_idx)])
