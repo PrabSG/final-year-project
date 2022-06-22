@@ -36,3 +36,19 @@ class UntilRequirement(SafetyRequirement):
   
   def get_req_objs(self) -> Set[str]:
     return self._req.get_req_objs().union(self._until_req.get_req_objs())
+
+class BlockRequirement(SafetyRequirement):
+  def __init__(self, formula: Union[Tuple, str], open_gap_objs: Iterable[str] = [], block_gap_objs: Iterable[str] = [], block_objs: Iterable[str] = []) -> None:
+    super().__init__(formula, [], [])
+    self._open_gap_objs = set(open_gap_objs)
+    self._block_gap_objs = set(block_gap_objs)
+    self._block_objs = set(block_objs)
+  
+  def get_open_gap_objs(self) -> Set[str]:
+    return self._open_gap_objs
+  
+  def get_block_gap_objs(self) -> Set[str]:
+    return self._block_gap_objs
+
+  def get_block_objs(self) -> Set[str]:
+    return self._block_objs
