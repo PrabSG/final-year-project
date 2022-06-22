@@ -54,8 +54,8 @@ class UnsafeCrossingEnv(MiniGridEnv):
       ("next", ("not", SAFETY_PROPS_TO_SYMBOLS["touching_glass"]))
     ),
     open_gap_objs=["glass"],
-    block_gap_objs=["glass"],
-    block_objs=["water"]
+    block_gap_objs=["water"],
+    block_objs=["glass"]
   )
   only_glass_after_water_block = BlockRequirement(
     ("until",
