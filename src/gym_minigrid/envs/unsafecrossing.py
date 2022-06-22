@@ -22,7 +22,7 @@ SAFETY_PROPS_TO_SYMBOLS = {
   "touching_water": "b",
   "touching_glass": "c",
   # "standing_still": "d",
-  "reach_goal": "e"
+  "reach_goal": "d"
 }
 # STANDING_STILL_LIMIT = 3
 
