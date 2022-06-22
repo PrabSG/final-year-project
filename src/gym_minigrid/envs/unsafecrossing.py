@@ -134,12 +134,12 @@ class UnsafeCrossingEnv(MiniGridEnv):
   def _place_block_gaps(self, row, gaps, safe_gap_idx):
     assert isinstance(self._safety_spec, BlockRequirement)
 
-    open_gap_obj = self._rand_elem(self._safety_spec.get_open_gap_objs())
+    open_gap_obj_type = self._rand_elem(self._safety_spec.get_open_gap_objs())
     block_gap_obj_type = self._rand_elem(self._safety_spec.get_block_gap_objs())
     block_obj_type = self._rand_elem(self._safety_spec.get_block_objs())
 
-    if not self.no_safe_obstacle:
-      self.put_obj(self.tile_objs[open_gap_obj], row, gaps[abs(0 - safe_gap_idx)])
+    if not self.no_safe_obstacle and open_gap_obj_type is not None:
+      self.put_obj(self.tile_objs[open_gap_obj_type], row, gaps[abs(0 - safe_gap_idx)])
     self.put_obj(self.tile_objs[block_gap_obj_type], row, gaps[abs(1 - safe_gap_idx)])
     # TODO(PrabSG@): Address possible unsolvable case where blocking item stops agent from reaching
     # next safe gap when num_crossings > 1
@@ -191,8 +191,9 @@ class UnsafeCrossingEnv(MiniGridEnv):
                      len(self._safety_spec.get_req_objs()) > 0 else
                      self.safe_gap_types - self._safety_spec.get_avoid_objs())
 
-        if not self.no_safe_obstacle:
-          self.put_obj(self.tile_objs[self._rand_elem(gap_types)], i, gaps[abs(0 - safe_gap_idx)])
+        gap_type = self._rand_elem(gap_types)
+        if not self.no_safe_obstacle and gap_type is not None:
+          self.put_obj(self.tile_objs[gap_type], i, gaps[abs(0 - safe_gap_idx)])
         self.put_obj(self.tile_objs[self._rand_elem(obstacle_types)], i, gaps[abs(1 - safe_gap_idx)])
 
     self.mission = (
