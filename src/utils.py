@@ -108,31 +108,37 @@ def plot_agent_variants(all_metrics: List[List[Dict]], variant_labels: List[str]
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(description="Agent and Environment options")
   # Plotting options
-  parser.add_argument("--plot", action="store_true", help="Plot results into a pgf")
   parser.add_argument("--load-metrics", type=str, help="Pickle file location for metrics")
-  parser.add_argument("--variant-metrics", type=str, help="Pickle file location of comparison metrics")
-  parser.add_argument("--main-method-name", type=str)
-  parser.add_argument("--variant-name", type=str)
+  parser.add_argument("--main-method-name", type=str, help="Name of main method type used for plotting legends")
+  parser.add_argument("--variant-metrics", nargs="+", help="Pickle file locations of comparison metrics")
+  parser.add_argument("--variant-names", nargs="+", help="Names of variant types used for plotting legends")
   parser.add_argument("--results-dir", type=str, help="Location to save plots")
 
   args = parser.parse_args()
 
-  if args.plot and args.load_metrics is not None and args.results_dir is not None:
+  if args.load_metrics is not None and args.results_dir is not None:
+    # Plot multiple variants on same graph
     with open(args.load_metrics, "rb") as f:
       print("Loading metrics file...")
       agent_metrics = pickle.load(f)
 
-    if args.variant_metrics is not None and args.main_method_name is not None and args.variant_name is not None:
-      with open(args.variant_metrics, "rb") as vf:
-        print("Loading variant metrics file...")
-        variant_metrics = pickle.load(vf)
+    if args.variant_metrics is not None and args.main_method_name is not None and args.variant_names is not None:
+      var_metrics = []
+      for variant in args.variant_metrics:
+        with open(variant, "rb") as vf:
+          print("Loading variant metrics file...")
+          var_metrics.append(pickle.load(vf))
 
       ylabels = agent_metrics[0]["metric_titles"]
       main_fields = (agent_metrics[0].keys() - {"steps", "episodes", "metric_titles", "test_episodes", "test_rewards"})
-      common_fields = main_fields.intersection(variant_metrics[0].keys())
+      common_fields = main_fields
+      for vm in var_metrics:
+        common_fields = common_fields.intersection(vm[0].keys())
+
       print("Plotting...")
-      plot_agent_variants([agent_metrics, variant_metrics], [args.main_method_name, args.variant_name], common_fields, ylabels, args.results_dir)
+      plot_agent_variants([agent_metrics, *var_metrics], [args.main_method_name, *args.variant_names], common_fields, ylabels, args.results_dir)
     else:
+      # Plot single set of data
       ylabels = agent_metrics[0]["metric_titles"]
       fields = list(agent_metrics[0].keys() - {"steps", "episodes", "metric_titles", "test_episodes", "test_rewards"})
       print("Plotting...")
