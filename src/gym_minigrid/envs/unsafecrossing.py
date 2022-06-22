@@ -55,7 +55,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
       ("next", ("not", SAFETY_PROPS_TO_SYMBOLS["touching_glass"]))
     ),
     SAFETY_PROPS_TO_SYMBOLS["reach_goal"]
-    )
+    ),
     open_gap_objs=["glass"],
     block_gap_objs=["water"],
     block_objs=["glass"]
