@@ -49,10 +49,13 @@ class UnsafeCrossingEnv(MiniGridEnv):
 
   # More complex safety specs
   no_glass_after_water = BlockRequirement(
+    ("until",
     ("or",
       ("not", SAFETY_PROPS_TO_SYMBOLS["touching_water"]),
       ("next", ("not", SAFETY_PROPS_TO_SYMBOLS["touching_glass"]))
     ),
+    SAFETY_PROPS_TO_SYMBOLS["reach_goal"]
+    )
     open_gap_objs=["glass"],
     block_gap_objs=["water"],
     block_objs=["glass"]
@@ -299,8 +302,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
       env_spec = SafetyRequirement(formula, avoid_objs=to_avoid, req_objs=required)
     else: # Block spec (sampled < w_one + w_two + w_until = 1)
       spec = self._rand_elem(self.block_specs)
-      formula = ("until", spec.get_formula(), SAFETY_PROPS_TO_SYMBOLS["reach_goal"])      
-      env_spec = BlockRequirement(formula, open_gap_objs=spec.get_open_gap_objs(), block_gap_objs=spec.get_block_gap_objs(), block_objs=spec.get_block_objs())
+      env_spec = spec
 
     self._num_episodes += 1
 
