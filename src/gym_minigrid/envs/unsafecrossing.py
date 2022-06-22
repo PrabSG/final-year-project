@@ -49,11 +49,9 @@ class UnsafeCrossingEnv(MiniGridEnv):
 
   # More complex safety specs
   no_glass_after_water = BlockRequirement(
-    ("until",
     ("or",
       ("not", SAFETY_PROPS_TO_SYMBOLS["touching_water"]),
-      ("next", ("not", SAFETY_PROPS_TO_SYMBOLS["touching_glass"]))),
-    SAFETY_PROPS_TO_SYMBOLS["reach_goal"]
+      ("next", ("not", SAFETY_PROPS_TO_SYMBOLS["touching_glass"]))
     ),
     open_gap_objs=["glass"],
     block_gap_objs=["glass"],
@@ -61,11 +59,8 @@ class UnsafeCrossingEnv(MiniGridEnv):
   )
   only_glass_after_water_block = BlockRequirement(
     ("until",
-    ("until",
       ("not", SAFETY_PROPS_TO_SYMBOLS["touching_glass"]),
       SAFETY_PROPS_TO_SYMBOLS["touching_water"]
-    ),
-    SAFETY_PROPS_TO_SYMBOLS["reach_goal"]
     ),
     open_gap_objs=["glass"],
     block_gap_objs=["water"],
