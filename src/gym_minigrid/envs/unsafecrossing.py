@@ -148,7 +148,7 @@ class UnsafeCrossingEnv(MiniGridEnv):
     self.put_obj(self.tile_objs[block_gap_obj_type], row, gaps[abs(1 - safe_gap_idx)])
     # TODO(PrabSG@): Address possible unsolvable case where blocking item stops agent from reaching
     # next safe gap when num_crossings > 1
-    self.put_obj(self.tile_objs[block_obj_type], row + 1, gaps([abs(1 - safe_gap_idx)]))
+    self.put_obj(self.tile_objs[block_obj_type], row + 1, gaps[abs(1 - safe_gap_idx)])
 
   def _gen_grid(self, width, height):
     assert self.num_crossings <= math.ceil((width - 4) / 2)
