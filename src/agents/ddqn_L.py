@@ -209,7 +209,7 @@ class DDQNLAgent(Agent):
     return self.params.q_loss_scale * q_loss.cpu().item()
 
   # DEBUG: Added results_dir to train function
-  def train(self, env: SafetyConstrainedEnv, print_logging=False, writer=None, results_dir=None):
+  def train(self, env: SafetyConstrainedEnv, print_logging=False, writer=None):
     if print_logging:
       print("Training DDQN agent...")
 
@@ -231,16 +231,11 @@ class DDQNLAgent(Agent):
       state = env.get_observation().unsqueeze(0).to(self.params.device)
       comb_state = SafetyState(state, safety_spec.unsqueeze(1))
       episode_transitions = []
-      
-      # DEBUG
-      frames = []
 
       train_loss_ep = 0
       q_loss_ep = 0
 
       for t in range(self.params.max_episode_len):
-        # DEBUG
-        frames.append(np.moveaxis(env._env.render("rgb_array"), 2, 0))
         with torch.no_grad():
           eps = self.params.eps_func(i_episode)
           action = self._get_action(comb_state, eps=eps)
@@ -273,12 +268,6 @@ class DDQNLAgent(Agent):
         comb_state = SafetyState(state, safety_spec.unsqueeze(1))
 
       self._exp_replay.add_episode(episode_transitions)
-
-      #DEBUG
-      if num_violations > 1 and i_episode > 50:
-        fname = f"/spec_{raw_safety_spec}_vios_{num_violations}_eps_{i_episode}.gif"
-        write_gif(np.array(frames), results_dir + fname, fps=1/0.25)
-
 
       self.metrics["steps"].append(t+1 + (0 if len(self.metrics["steps"]) == 0 else self.metrics["steps"][-1]))
       self.metrics["episode_rewards"].append(total_reward)
