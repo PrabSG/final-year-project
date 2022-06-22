@@ -283,16 +283,16 @@ class UnsafeCrossingEnv(MiniGridEnv):
     sampled = self._rand_float(0, 1.0)
 
     if sampled < w_one: # One avoid spec
-      avoid = self._rand_elem(self.avoid_specs)
+      avoid = self._rand_elem(self.basic_specs)
       formula = ("until", avoid.get_formula(), SAFETY_PROPS_TO_SYMBOLS["reach_goal"])
       to_avoid = to_avoid.union(avoid.get_avoid_objs())
       required = required.union(avoid.get_req_objs())
       env_spec = SafetyRequirement(formula, avoid_objs=to_avoid, req_objs=required)
     elif sampled < w_one + w_two: # Two avoid spec
-      avoid1, avoid2 = self._rand_subset(self.avoid_specs, 2)
+      avoid1, avoid2 = self._rand_subset(self.basic_specs, 2)
       clashing_reqs = avoid1.get_avoid_objs().intersection(avoid2.get_req_objs()).union(avoid2.get_avoid_objs().intersection(avoid1.get_req_objs()))
       while len(clashing_reqs) != 0:
-        avoid1, avoid2 = self._rand_subset(self.avoid_specs, 2)
+        avoid1, avoid2 = self._rand_subset(self.basic_specs, 2)
         clashing_reqs = avoid1.get_avoid_objs().intersection(avoid2.get_req_objs()).union(avoid2.get_avoid_objs().intersection(avoid1.get_req_objs()))
 
       formula = ("until", ("and", avoid1.get_formula(), avoid2.get_formula()), SAFETY_PROPS_TO_SYMBOLS["reach_goal"])
