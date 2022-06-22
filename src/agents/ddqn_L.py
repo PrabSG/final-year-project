@@ -276,7 +276,7 @@ class DDQNLAgent(Agent):
 
       #DEBUG
       if num_violations > 1 and i_episode > 50:
-        fname = f"spec_{raw_safety_spec}_vios_{num_violations}_eps_{i_episode}.gif"
+        fname = f"/spec_{raw_safety_spec}_vios_{num_violations}_eps_{i_episode}.gif"
         write_gif(np.array(frames), results_dir + fname, fps=1/0.25)
 
 
