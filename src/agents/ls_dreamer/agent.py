@@ -432,7 +432,7 @@ class LatentShieldedDreamer(Agent):
         self.D.append(observation, action, reward, violation, done)
         observation = next_observation
         t += 1
-      self.metrics['cum_num_violations'].append(self.metrics['cum_num_violations'][-1] + violation_count)
+      self.metrics['cum_num_violations'].append(0 if len(self.metrics['cum_num_violations']) == 0 else self.metrics['cum_num_violations'][-1] + violation_count)
       self.metrics['steps'].append(t * self.params.action_repeat + (0 if len(self.metrics['steps']) == 0 else self.metrics['steps'][-1]))
       self.metrics['episodes'].append(s)
       self.metrics['observation_loss'].append(0)
