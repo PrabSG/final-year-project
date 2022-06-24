@@ -90,7 +90,7 @@ def plot_agent_variants(all_metrics: List[List[Dict]], variant_labels: List[str]
       plt.plot(data_mean, color=cols[variant][1], label=variant_labels[variant])
 
     if "rewards" in field:
-      plt.ylim(top=2.0)
+      plt.ylim(top=2.0, bottom=-10.0)
     if "loss" in field:
       plt.ylim(bottom=0.0)
     if "kl" in field or "observation" in field:
